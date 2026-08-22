@@ -1,12 +1,12 @@
 import asyncio
 import logging
 import os
-import json
 import re
-import shlex
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Optional
-from urllib.parse import quote, urlparse, parse_qs
-from urllib.request import Request, urlopen
+from urllib.parse import parse_qs, urlparse
 
 import discord
 import yt_dlp
@@ -14,73 +14,81 @@ from discord.ext import commands
 
 logger = logging.getLogger("honar.music")
 
-FFMPEG_OPTIONS = {
-    "before_options": (
-        "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
-    ),
-    "options": "-vn",
-}
-
-YOUTUBE_CLIENTS = [
-    "mweb",
-    "web_embedded",
-    "tv",
-    "android_vr",
-    "web_safari",
-    "ios",
-    "web_music",
-    "web",
-]
-
-BASE_YDL_OPTIONS = {
-    "format": "bestaudio/best",
-    "noplaylist": True,
-    "quiet": True,
-    "no_warnings": True,
-    "default_search": "ytsearch",
-    "retries": 2,
-    "fragment_retries": 2,
-    "extractor_retries": 2,
-    "socket_timeout": 20,
-    "http_headers": {
-        "User-Agent": (
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
-        ),
-        "Accept-Language": "en-US,en;q=0.9",
-    },
-    "js_runtimes": {"deno": {}},
-}
-
-YOUTUBE_POT_PROVIDER_URL = os.getenv(
-    "YOUTUBE_POT_PROVIDER_URL",
-    "http://127.0.0.1:4416",
-).strip() or "http://127.0.0.1:4416"
-
-PIPED_INSTANCES = [
-    "https://pipedapi.kavin.rocks",
-    "https://pipedapi.leptons.xyz",
-    "https://pipedapi.nosebs.ru",
-    "https://pipedapi-libre.kavin.rocks",
-    "https://piped-api.privacy.com.de",
-    "https://pipedapi.adminforge.de",
-    "https://api.piped.yt",
-    "https://pipedapi.drgns.space",
-    "https://pipedapi.owo.si",
-]
-
-INVIDIOUS_INSTANCES = [
-    "https://inv.nadeko.net",
-    "https://invidious.nerdvpn.de",
-    "https://yt.chocolatemoo53.com",
-    "https://invidious.tiekoetter.com",
-    "https://invidious.f5.si",
-]
-
 YOUTUBE_URL = re.compile(
     r"^(https?://)?(www\.)?(youtube\.com|youtu\.be)/",
     re.IGNORECASE,
 )
+
+POT_PROVIDER_URL = (
+    os.getenv("YOUTUBE_POT_PROVIDER_URL", "http://127.0.0.1:4416").strip()
+    or "http://127.0.0.1:4416"
+)
+
+# YouTube has been changing which clients require PO tokens.  mweb is the
+# recommended client for GVS + PO tokens; web_embedded/tv are useful fallbacks.
+YOUTUBE_CLIENTS = ("mweb", "web_embedded", "tv", "android_vr")
+
+MUSIC_TMP_ROOT = Path(
+    os.getenv("MUSIC_TMP_DIR", "/tmp/hmb-nexus-music")
+)
+MUSIC_TMP_ROOT.mkdir(parents=True, exist_ok=True)
+
+UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+)
+
+
+def _base_ydl_options(client: str, *, download: bool = False, outtmpl: str = "") -> dict:
+    options = {
+        "format": "bestaudio/best",
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        "default_search": "ytsearch",
+        "retries": 3,
+        "fragment_retries": 3,
+        "extractor_retries": 3,
+        "file_access_retries": 3,
+        "socket_timeout": 30,
+        "force_ipv4": True,
+        "http_headers": {
+            "User-Agent": UA,
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+        # Modern yt-dlp uses Deno + yt-dlp-ejs for YouTube JS challenges.
+        "js_runtimes": {"deno": {}},
+        "remote_components": {"ejs": ["github"]},
+        "extractor_args": {
+            "youtube": {
+                "player_client": [client],
+            },
+            "youtubepot-bgutilhttp": {
+                "base_url": POT_PROVIDER_URL,
+            },
+        },
+    }
+
+    # Optional browser cookies. The bot works without them when YouTube allows
+    # anonymous playback, but an operator can provide a valid cookies file if
+    # YouTube requires authentication for a particular video/IP.
+    cookie_file = os.getenv("YOUTUBE_COOKIE_FILE", "").strip()
+    if cookie_file and Path(cookie_file).is_file():
+        options["cookiefile"] = cookie_file
+
+    if download:
+        options.update(
+            {
+                "outtmpl": outtmpl,
+                "overwrites": True,
+                "continuedl": False,
+                "nopart": True,
+                # Keep the file in the source container; ffmpeg only reads it.
+                "postprocessors": [],
+            }
+        )
+
+    return options
 
 
 class Music(commands.Cog):
@@ -88,440 +96,211 @@ class Music(commands.Cog):
         self.bot = bot
         self.queues: dict[int, list[dict]] = {}
         self.now_playing: dict[int, Optional[dict]] = {}
+        self._download_lock: dict[int, asyncio.Lock] = {}
 
     def get_queue(self, guild_id: int) -> list[dict]:
         return self.queues.setdefault(guild_id, [])
 
-    @staticmethod
-    def _extract(query: str) -> Optional[dict]:
-        last_error = None
-
-        for client in YOUTUBE_CLIENTS:
-            options = {
-                **BASE_YDL_OPTIONS,
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": [client],
-                    },
-                    "youtubepot-bgutilhttp": {
-                        "base_url": YOUTUBE_POT_PROVIDER_URL,
-                    },
-                },
-            }
-
-            try:
-                with yt_dlp.YoutubeDL(options) as ydl:
-                    info = ydl.extract_info(query, download=False)
-
-                if not info:
-                    continue
-
-                if "entries" in info:
-                    entries = [entry for entry in info["entries"] if entry]
-                    if not entries:
-                        continue
-                    info = entries[0]
-
-                stream_url = info.get("url")
-                stream_headers = dict(info.get("http_headers") or {})
-
-                if not stream_url:
-                    formats = [
-                        f for f in (info.get("formats") or [])
-                        if f.get("url")
-                        and f.get("acodec") not in (None, "none")
-                    ]
-                    if formats:
-                        formats.sort(
-                            key=lambda f: (
-                                int(f.get("abr") or 0),
-                                int(f.get("tbr") or 0),
-                            ),
-                            reverse=True,
-                        )
-                        stream_url = formats[0].get("url")
-                        stream_headers = dict(formats[0].get("http_headers") or stream_headers)
-
-                if not stream_url:
-                    continue
-
-                return {
-                    "url": info.get("webpage_url")
-                    or info.get("original_url")
-                    or query,
-                    "stream_url": stream_url,
-                    "stream_headers": stream_headers,
-                    "title": info.get("title", "نەناسراو"),
-                    "duration": int(info.get("duration") or 0),
-                    "thumbnail": info.get("thumbnail"),
-                }
-
-            except Exception as exc:
-                last_error = exc
-                logger.warning(
-                    "YouTube client %s failed: %s",
-                    client,
-                    str(exc)[:250],
-                )
-
-        if last_error:
-            raise last_error
-        return None
+    def _guild_lock(self, guild_id: int) -> asyncio.Lock:
+        return self._download_lock.setdefault(guild_id, asyncio.Lock())
 
     @staticmethod
     def _youtube_video_id(value: str) -> Optional[str]:
         try:
             parsed = urlparse(value)
             host = parsed.netloc.lower().split(":")[0]
-
             if host == "youtu.be":
                 return parsed.path.strip("/").split("/")[0] or None
-
             if "youtube.com" in host:
                 value_id = parse_qs(parsed.query).get("v", [None])[0]
                 if value_id:
                     return value_id
-
                 parts = [p for p in parsed.path.split("/") if p]
-                if len(parts) >= 2 and parts[0] in {
-                    "shorts", "embed", "live",
-                }:
+                if len(parts) >= 2 and parts[0] in {"shorts", "embed", "live"}:
                     return parts[1]
-
         except Exception:
-            return None
-
+            pass
         return None
 
     @staticmethod
-    def _http_json(url: str, timeout: int = 10) -> object:
-        req = Request(
-            url,
-            headers={
-                "User-Agent": "HMB-NEXUS/3.0",
-                "Accept": "application/json",
-            },
-        )
-        with urlopen(req, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
-
-    @staticmethod
-    def _piped_video_id(value: str) -> Optional[str]:
-        if not value:
+    def _pick_entry(info: dict) -> Optional[dict]:
+        if not info:
             return None
+        if info.get("entries") is not None:
+            for entry in info.get("entries") or []:
+                if entry:
+                    return entry
+            return None
+        return info
 
-        match = re.search(
-            r"(?:v=|/watch/|/video/)([A-Za-z0-9_-]{11})",
-            value,
-        )
-        if match:
-            return match.group(1)
+    @classmethod
+    def _extract_info(cls, query: str) -> Optional[dict]:
+        last_error: Optional[Exception] = None
 
-        if re.fullmatch(r"[A-Za-z0-9_-]{11}", value):
-            return value
+        for client in YOUTUBE_CLIENTS:
+            try:
+                opts = _base_ydl_options(client)
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(query, download=False)
+                info = cls._pick_entry(info)
+                if not info:
+                    continue
 
+                # A resolved stream URL is still returned for compatibility
+                # with the existing panel/queue. Playback itself does NOT feed
+                # this URL to ffmpeg; it downloads through yt-dlp first.
+                return {
+                    "url": info.get("webpage_url") or info.get("original_url") or query,
+                    "title": info.get("title") or "نەناسراو",
+                    "duration": int(info.get("duration") or 0),
+                    "thumbnail": info.get("thumbnail"),
+                    "video_id": info.get("id") or cls._youtube_video_id(query),
+                }
+            except Exception as exc:
+                last_error = exc
+                logger.warning("yt-dlp extract client=%s failed: %s", client, str(exc)[:300])
+
+        if last_error:
+            raise last_error
         return None
 
     @classmethod
-    def _extract_piped(cls, query: str) -> Optional[dict]:
-        video_id = cls._youtube_video_id(query)
+    def _download_audio(cls, query: str) -> dict:
+        """Download the audio with yt-dlp, then let FFmpeg read a local file.
 
-        for instance in PIPED_INSTANCES:
+        This is intentional: passing a signed googlevideo URL directly to
+        FFmpeg can produce HTTP 403 even when yt-dlp itself can download it.
+        yt-dlp keeps the YouTube headers/PO-token/session handling on the
+        request that actually transfers the media.
+        """
+        last_error: Optional[Exception] = None
+        workdir: Optional[Path] = None
+
+        for client in YOUTUBE_CLIENTS:
             try:
-                current_id = video_id
+                workdir = Path(tempfile.mkdtemp(prefix="track-", dir=MUSIC_TMP_ROOT))
+                outtmpl = str(workdir / "audio.%(ext)s")
+                opts = _base_ydl_options(client, download=True, outtmpl=outtmpl)
+                opts["paths"] = {"home": str(workdir)}
 
-                if not current_id:
-                    search_query = query
-                    if search_query.lower().startswith("ytsearch:"):
-                        search_query = search_query[9:].strip()
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(query, download=True)
+                    info = cls._pick_entry(info)
 
-                    data = cls._http_json(
-                        f"{instance}/search"
-                        f"?q={quote(search_query)}&filter=videos"
-                    )
+                if not info:
+                    raise RuntimeError("yt-dlp هیچ گۆرانییەکی نەگەڕاندەوە")
 
-                    if isinstance(data, dict):
-                        items = data.get("items") or []
-                    elif isinstance(data, list):
-                        items = data
-                    else:
-                        items = []
-
-                    for item in items:
-                        candidate = (
-                            item.get("url")
-                            or item.get("videoId")
-                            or item.get("id")
-                        )
-                        current_id = cls._piped_video_id(str(candidate))
-                        if current_id:
-                            break
-
-                if not current_id:
-                    continue
-
-                data = cls._http_json(
-                    f"{instance}/streams/{current_id}"
+                candidates = sorted(
+                    p for p in workdir.iterdir()
+                    if p.is_file() and p.name != ".ytdl"
                 )
+                if not candidates:
+                    raise RuntimeError("فایلی دەنگ دروست نەکرا")
 
-                if not isinstance(data, dict):
-                    continue
-
-                streams = [
-                    stream for stream in (data.get("audioStreams") or [])
-                    if stream.get("url")
-                ]
-
-                if not streams:
-                    continue
-
-                streams.sort(
-                    key=lambda stream: (
-                        int(stream.get("bitrate") or 0),
-                        int(stream.get("contentLength") or 0),
-                    ),
-                    reverse=True,
-                )
-
-                audio = streams[0]
-
+                audio_file = candidates[0]
                 return {
-                    "url": f"https://www.youtube.com/watch?v={current_id}",
-                    "stream_url": audio["url"],
-                    "stream_headers": {"User-Agent": "Mozilla/5.0"},
-                    "title": data.get("title") or "نەناسراو",
-                    "duration": int(data.get("duration") or 0),
-                    "thumbnail": data.get("thumbnailUrl")
-                    or f"https://i.ytimg.com/vi/{current_id}/hqdefault.jpg",
+                    "url": info.get("webpage_url") or info.get("original_url") or query,
+                    "title": info.get("title") or "نەناسراو",
+                    "duration": int(info.get("duration") or 0),
+                    "thumbnail": info.get("thumbnail"),
+                    "video_id": info.get("id") or cls._youtube_video_id(query),
+                    "audio_file": str(audio_file),
+                    "temp_dir": str(workdir),
                 }
 
             except Exception as exc:
-                logger.warning(
-                    "Piped fallback %s failed: %s",
-                    instance,
-                    str(exc)[:180],
-                )
+                last_error = exc
+                logger.warning("yt-dlp download client=%s failed: %s", client, str(exc)[:350])
+                if workdir:
+                    shutil.rmtree(workdir, ignore_errors=True)
+                workdir = None
 
-        return None
-
-    @classmethod
-    def _extract_invidious(cls, query: str) -> Optional[dict]:
-        video_id = cls._youtube_video_id(query)
-
-        for instance in INVIDIOUS_INSTANCES:
-            try:
-                if video_id:
-                    data = cls._http_json(
-                        f"{instance}/api/v1/videos/{video_id}?hl=en"
-                    )
-                else:
-                    search_query = query
-                    if search_query.lower().startswith("ytsearch:"):
-                        search_query = search_query[9:].strip()
-
-                    results = cls._http_json(
-                        f"{instance}/api/v1/search"
-                        f"?q={quote(search_query)}&type=video&hl=en"
-                    )
-
-                    if not isinstance(results, list) or not results:
-                        continue
-
-                    first = next(
-                        (
-                            item for item in results
-                            if item.get("type") == "video"
-                        ),
-                        None,
-                    )
-
-                    if not first:
-                        continue
-
-                    video_id = first.get("videoId")
-                    if not video_id:
-                        continue
-
-                    data = cls._http_json(
-                        f"{instance}/api/v1/videos/{video_id}?hl=en"
-                    )
-
-                if not isinstance(data, dict):
-                    continue
-
-                audio = [
-                    fmt for fmt in (data.get("adaptiveFormats") or [])
-                    if fmt.get("url")
-                    and str(fmt.get("type", "")).startswith("audio/")
-                ]
-
-                audio.sort(
-                    key=lambda fmt: (
-                        int(fmt.get("bitrate") or 0),
-                        int(fmt.get("clen") or 0),
-                    ),
-                    reverse=True,
-                )
-
-                if not audio:
-                    continue
-
-                fmt = audio[0]
-                thumbs = data.get("videoThumbnails") or []
-                thumb = thumbs[-1].get("url") if thumbs else None
-
-                return {
-                    "url": f"https://www.youtube.com/watch?v={video_id}",
-                    "stream_url": fmt["url"],
-                    "stream_headers": {"User-Agent": "Mozilla/5.0"},
-                    "title": data.get("title", "نەناسراو"),
-                    "duration": int(data.get("lengthSeconds") or 0),
-                    "thumbnail": thumb,
-                }
-
-            except Exception as exc:
-                logger.warning(
-                    "Invidious fallback %s failed: %s",
-                    instance,
-                    str(exc)[:180],
-                )
-
+        if last_error:
+            raise last_error
         return None
 
     @classmethod
     def _extract_any(cls, query: str) -> Optional[dict]:
-        primary_error = None
-
-        try:
-            result = cls._extract(query)
-            if result:
-                return result
-        except Exception as exc:
-            primary_error = exc
-            logger.warning(
-                "yt-dlp failed; trying Piped fallback: %s",
-                str(exc)[:300],
-            )
-
-        fallback = cls._extract_piped(query)
-        if fallback:
-            return fallback
-
-        fallback = cls._extract_invidious(query)
-        if fallback:
-            return fallback
-
-        if primary_error:
-            raise primary_error
-
-        return None
+        return cls._extract_info(query)
 
     async def _resolve(self, query: str) -> Optional[dict]:
         return await asyncio.to_thread(self._extract_any, query)
 
-    async def _send_play_error(
-        self,
-        ctx: commands.Context,
-        exc: Exception,
-    ):
+    async def _send_play_error(self, ctx, exc: Exception):
         text = str(exc)
         lowered = text.lower()
-
         if any(
-            x in lowered
-            for x in (
+            marker in lowered
+            for marker in (
                 "sign in to confirm",
                 "confirm you're not a bot",
                 "login required",
                 "po token",
                 "http error 403",
+                "forbidden",
             )
         ):
-            await ctx.send(
-                "❌ YouTube لەم کاتەدا دەستپێگەیشتنی anonymous "
-                "ـی ئەم لینکە ڕەتکردەوە.\n"
-                "🔄 Piped fallback ـیش تاقیکراوەتەوە. "
-                "لینکێکی تر یان ناوی گۆرانییەکی تر تاقی بکەرەوە."
+            message = (
+                "❌ **YouTube playback ڕەتکرایەوە.**\n"
+                "🔐 PO Token provider هەوڵی دا، بەڵام YouTube ئەم request ـەی ڕەتکردەوە.\n"
+                "💡 زۆرجار هۆکارەکە IP/YouTube restriction ـە؛ Cookie تەنها کاتێک پێویستە "
+                "کە ڤیدیۆکە login بخوازێت."
             )
-            return
+        else:
+            message = f"❌ هەڵە لە ژەنین: `{text[:700]}`"
+        await ctx.send(message)
 
-        await ctx.send(
-            f"❌ هەڵە لە ژەنین: `{text[:500]}`"
-        )
-
-    async def _play_song(
-        self,
-        ctx: commands.Context,
-        song: dict,
-    ):
+    async def _play_song(self, ctx, song: dict):
         voice = ctx.voice_client
         if not voice or not voice.is_connected():
             return
 
+        guild_id = ctx.guild.id
+        temp_dir: Optional[str] = None
+
         try:
-            info = await self._resolve(song["url"])
+            async with self._guild_lock(guild_id):
+                # Re-resolve/download immediately before playback so temporary
+                # YouTube URLs are never reused from an earlier request.
+                info = await asyncio.to_thread(self._download_audio, song["url"])
 
-            if not info or not info.get("stream_url"):
-                await ctx.send(
-                    "❌ نەتوانرا گۆرانییەکە بخوێندرێتەوە."
-                )
-                return
+            if not info or not info.get("audio_file"):
+                raise RuntimeError("گۆرانییەکە download نەکرا")
 
-            stream_headers = dict(info.get("stream_headers") or {})
-            # YouTube signed googlevideo URLs can return HTTP 403 if ffmpeg
-            # does not reuse the headers yt-dlp used while resolving the stream.
-            # Pass the same headers to ffmpeg without storing cookies.
-            header_blob = "\r\n".join(
-                f"{k}: {v}" for k, v in stream_headers.items()
-                if v is not None and str(v).strip()
-            )
-            ffmpeg_before = FFMPEG_OPTIONS["before_options"]
-            if header_blob:
-                ffmpeg_before = (
-                    f'{ffmpeg_before} -headers {shlex.quote(header_blob + chr(13) + chr(10))}'
-                )
-
-            source = discord.PCMVolumeTransformer(
-                discord.FFmpegPCMAudio(
-                    info["stream_url"],
-                    before_options=ffmpeg_before,
-                    options=FFMPEG_OPTIONS["options"],
-                ),
-                volume=1.0,
-            )
-
-            guild_id = ctx.guild.id
-
+            temp_dir = info.get("temp_dir")
             self.now_playing[guild_id] = {
                 **info,
                 "requester": song.get("requester"),
                 "volume": 100,
             }
 
+            source = discord.PCMVolumeTransformer(
+                discord.FFmpegPCMAudio(
+                    info["audio_file"],
+                    before_options="-nostdin",
+                    options="-vn",
+                ),
+                volume=1.0,
+            )
+
             def after(error):
                 if error:
-                    logger.error(
-                        "Player error: %s",
-                        error,
-                    )
-
+                    logger.error("Player error: %s", error)
                 future = asyncio.run_coroutine_threadsafe(
-                    self.play_next(ctx),
-                    self.bot.loop,
+                    self.play_next(ctx), self.bot.loop
                 )
-
                 try:
                     future.result()
                 except Exception:
-                    logger.exception(
-                        "Failed to continue queue."
-                    )
+                    logger.exception("Failed to continue queue")
+                finally:
+                    if temp_dir:
+                        shutil.rmtree(temp_dir, ignore_errors=True)
 
             voice.play(source, after=after)
 
-            duration = info["duration"]
+            duration = int(info.get("duration") or 0)
             mins, secs = divmod(duration, 60)
-
             await ctx.send(
                 f"🎵 **ئێستا دەژەنێت:** {info['title']}\n"
                 f"⏱ `{mins}:{secs:02d}`\n"
@@ -529,20 +308,19 @@ class Music(commands.Cog):
             )
 
         except Exception as exc:
+            if temp_dir:
+                shutil.rmtree(temp_dir, ignore_errors=True)
             logger.exception("Music playback failed")
             await self._send_play_error(ctx, exc)
 
-    async def play_next(self, ctx: commands.Context):
+    async def play_next(self, ctx):
         guild_id = ctx.guild.id
         queue = self.get_queue(guild_id)
         voice = ctx.voice_client
-
         if not voice or not voice.is_connected():
             return
-
         if queue:
-            song = queue.pop(0)
-            await self._play_song(ctx, song)
+            await self._play_song(ctx, queue.pop(0))
         else:
             self.now_playing[guild_id] = None
             try:
@@ -550,239 +328,116 @@ class Music(commands.Cog):
             except discord.HTTPException:
                 pass
 
-    @commands.hybrid_command(
-        name="play",
-        aliases=("p", "ژەنین"),
-    )
-    async def play(
-        self,
-        ctx: commands.Context,
-        *,
-        query: str,
-    ):
-        """ژەنینی گۆرانی بە لینک یان ناو."""
+    @commands.hybrid_command(name="play", aliases=("p", "ژەنین"))
+    async def play(self, ctx: commands.Context, *, query: str):
         if not ctx.guild:
-            return await ctx.send(
-                "❌ ئەم فەرمانە تەنها لە سێرڤەر کار دەکات."
-            )
-
+            return await ctx.send("❌ ئەم فەرمانە تەنها لە سێرڤەر کار دەکات.")
         if not ctx.author.voice:
-            return await ctx.send(
-                "🔇 سەرەتا بچۆ ناو Voice Channel!"
-            )
+            return await ctx.send("🔇 سەرەتا بچۆ ناو Voice Channel!")
 
-        # Defer immediately for slash/hybrid invocations so slow
-        # extractor requests cannot cause Discord error 10062.
-        if (
-            ctx.interaction is not None
-            and not ctx.interaction.response.is_done()
-        ):
+        if ctx.interaction is not None and not ctx.interaction.response.is_done():
             await ctx.defer()
 
         voice = ctx.voice_client
-        target_channel = ctx.author.voice.channel
-
-        if voice and voice.channel != target_channel:
+        target = ctx.author.voice.channel
+        if voice and voice.channel != target:
             if voice.is_playing():
-                return await ctx.send(
-                    "❌ بۆت لە Voice Channel ـێکی ترە."
-                )
-            await voice.move_to(target_channel)
+                return await ctx.send("❌ بۆت لە Voice Channel ـێکی ترە.")
+            await voice.move_to(target)
         elif not voice:
-            voice = await target_channel.connect()
+            voice = await target.connect()
 
         try:
-            target = query.strip()
-            source_query = (
-                target
-                if YOUTUBE_URL.match(target)
-                else f"ytsearch:{target}"
-            )
+            target_query = query.strip()
+            source_query = target_query if YOUTUBE_URL.match(target_query) else f"ytsearch:{target_query}"
             song = await self._resolve(source_query)
-
         except Exception as exc:
-            logger.exception(
-                "YouTube/source resolve failed for %r",
-                query,
-            )
+            logger.exception("YouTube/source resolve failed for %r", query)
             await self._send_play_error(ctx, exc)
             return
 
         if not song:
-            return await ctx.send(
-                "❌ هیچ گۆرانییەک نەدۆزرایەوە."
-            )
+            return await ctx.send("❌ هیچ گۆرانییەک نەدۆزرایەوە.")
 
         song["requester"] = ctx.author
         queue = self.get_queue(ctx.guild.id)
-
         if voice.is_playing() or voice.is_paused():
             queue.append(song)
-            await ctx.send(
-                f"📥 **زیادکرا بۆ ڕیز:** {song['title']}\n"
-                f"📋 شوێن: `{len(queue)}`"
+            return await ctx.send(
+                f"📥 **زیادکرا بۆ ڕیز:** {song['title']}\n📋 شوێن: `{len(queue)}`"
             )
-        else:
-            await self._play_song(ctx, song)
+        await self._play_song(ctx, song)
 
-    @commands.hybrid_command(
-        name="skip",
-        aliases=("s", "next", "پەڕاندن"),
-    )
-    async def skip(self, ctx: commands.Context):
+    @commands.hybrid_command(name="skip", aliases=("s", "next", "پەڕاندن"))
+    async def skip(self, ctx):
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.stop()
             await ctx.send("⏭ **گۆرانی پەڕێندرایەوە.**")
         else:
             await ctx.send("❌ هیچ گۆرانییەک ناژەنرێت.")
 
-    @commands.hybrid_command(
-        name="stop",
-        aliases=("leave", "dc", "وەستان"),
-    )
-    async def stop(self, ctx: commands.Context):
-        guild_id = ctx.guild.id
-        self.queues[guild_id] = []
-        self.now_playing[guild_id] = None
-
+    @commands.hybrid_command(name="stop", aliases=("leave", "dc", "وەستان"))
+    async def stop(self, ctx):
+        self.queues[ctx.guild.id] = []
+        self.now_playing[ctx.guild.id] = None
         if ctx.voice_client:
             await ctx.voice_client.disconnect()
             await ctx.send("👋 **بۆت لە Voice دەرچوو.**")
         else:
             await ctx.send("❌ بۆت لە Voice نییە.")
 
-    @commands.hybrid_command(
-        name="queue",
-        aliases=("q", "list", "ڕیز"),
-    )
-    async def queue(self, ctx: commands.Context):
+    @commands.hybrid_command(name="queue", aliases=("q", "list", "ڕیز"))
+    async def queue(self, ctx):
         queue = self.get_queue(ctx.guild.id)
         current = self.now_playing.get(ctx.guild.id)
-
         if not queue and not current:
             return await ctx.send("📭 **ڕیز بەتاڵە.**")
-
         lines = ["📋 **ڕیزی گۆرانیەکان:**"]
-
         if current:
-            lines.append(
-                f"🎵 **ئێستا:** {current['title']}"
-            )
-
-        for index, song in enumerate(
-            queue[:10],
-            start=1,
-        ):
-            lines.append(
-                f"{index}. {song.get('title', song['url'])}"
-            )
-
+            lines.append(f"🎵 **ئێستا:** {current['title']}")
+        for index, song in enumerate(queue[:10], 1):
+            lines.append(f"{index}. {song.get('title', song.get('url', 'گۆرانی'))}")
         if len(queue) > 10:
-            lines.append(
-                f"... و {len(queue) - 10} گۆرانیی تر"
-            )
+            lines.append(f"... و {len(queue)-10} گۆرانیی تر")
+        lines.append(f"\n**کۆی ڕیز:** {len(queue)}")
+        await ctx.send("\n".join(lines)[:2000])
 
-        lines.append(
-            f"\n**کۆی ڕیز:** {len(queue)}"
-        )
-
-        await ctx.send(
-            "\n".join(lines)[:2000]
-        )
-
-    @commands.hybrid_command(
-        name="pause",
-        aliases=("pa", "ڕاگرتن"),
-    )
-    async def pause(self, ctx: commands.Context):
-        if (
-            ctx.voice_client
-            and ctx.voice_client.is_playing()
-        ):
+    @commands.hybrid_command(name="pause", aliases=("pa", "ڕاگرتن"))
+    async def pause(self, ctx):
+        if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.pause()
             await ctx.send("⏸ **ڕاگیرا.**")
         else:
-            await ctx.send(
-                "❌ هیچ گۆرانییەک ناژەنرێت."
-            )
+            await ctx.send("❌ هیچ گۆرانییەک ناژەنرێت.")
 
-    @commands.hybrid_command(
-        name="resume",
-        aliases=("res", "unpause", "بەردەوام"),
-    )
-    async def resume(self, ctx: commands.Context):
-        if (
-            ctx.voice_client
-            and ctx.voice_client.is_paused()
-        ):
+    @commands.hybrid_command(name="resume", aliases=("res", "unpause", "بەردەوام"))
+    async def resume(self, ctx):
+        if ctx.voice_client and ctx.voice_client.is_paused():
             ctx.voice_client.resume()
-            await ctx.send(
-                "▶️ **بەردەوام بووەوە.**"
-            )
+            await ctx.send("▶️ **بەردەوام بووەوە.**")
         else:
-            await ctx.send(
-                "❌ هیچ گۆرانییەک ڕانەگیراوە."
-            )
+            await ctx.send("❌ هیچ گۆرانییەک ڕانەگیراوە.")
 
-    @commands.hybrid_command(
-        name="volume",
-        aliases=("vol", "v", "دەنگ"),
-    )
-    async def volume(
-        self,
-        ctx: commands.Context,
-        vol: int,
-    ):
+    @commands.hybrid_command(name="volume", aliases=("vol", "v", "دەنگ"))
+    async def volume(self, ctx, vol: int):
         if not 0 <= vol <= 100:
-            return await ctx.send(
-                "❌ دەنگ دەبێت لە نێوان `0-100` بێت."
-            )
-
-        if (
-            ctx.voice_client
-            and ctx.voice_client.source
-            and isinstance(
-                ctx.voice_client.source,
-                discord.PCMVolumeTransformer,
-            )
-        ):
-            ctx.voice_client.source.volume = vol / 100
-
-            if ctx.guild.id in self.now_playing:
-                self.now_playing[
-                    ctx.guild.id
-                ]["volume"] = vol
-
-            await ctx.send(
-                f"🔊 **دەنگ:** `{vol}%`"
-            )
+            return await ctx.send("❌ دەنگ دەبێت لە نێوان `0-100` بێت.")
+        source = ctx.voice_client.source if ctx.voice_client else None
+        if isinstance(source, discord.PCMVolumeTransformer):
+            source.volume = vol / 100
+            current = self.now_playing.get(ctx.guild.id)
+            if current:
+                current["volume"] = vol
+            await ctx.send(f"🔊 **دەنگ:** `{vol}%`")
         else:
-            await ctx.send(
-                "❌ سەرچاوەی دەنگ بەردەست نییە."
-            )
+            await ctx.send("❌ سەرچاوەی دەنگ بەردەست نییە.")
 
-    @commands.hybrid_command(
-        name="nowplaying",
-        aliases=("np", "current", "ئێستا"),
-    )
-    async def nowplaying(
-        self,
-        ctx: commands.Context,
-    ):
-        current = self.now_playing.get(
-            ctx.guild.id
-        )
-
+    @commands.hybrid_command(name="nowplaying", aliases=("np", "current", "ئێستا"))
+    async def nowplaying(self, ctx):
+        current = self.now_playing.get(ctx.guild.id)
         if not current:
-            return await ctx.send(
-                "❌ هیچ گۆرانییەک ناژەنرێت."
-            )
-
-        mins, secs = divmod(
-            current["duration"],
-            60,
-        )
-
+            return await ctx.send("❌ هیچ گۆرانییەک ناژەنرێت.")
+        mins, secs = divmod(int(current.get("duration") or 0), 60)
         embed = discord.Embed(
             title="🎵 ئێستا دەژەنێت",
             description=(
@@ -791,51 +446,25 @@ class Music(commands.Cog):
                 f"🔊 `{current.get('volume', 100)}%`"
             ),
             color=0x5865F2,
-            url=current["url"],
+            url=current.get("url"),
         )
-
         if current.get("thumbnail"):
-            embed.set_thumbnail(
-                url=current["thumbnail"]
-            )
-
+            embed.set_thumbnail(url=current["thumbnail"])
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(
-        name="remove",
-        aliases=("rm", "del", "لابردن"),
-    )
-    async def remove(
-        self,
-        ctx: commands.Context,
-        index: int,
-    ):
+    @commands.hybrid_command(name="remove", aliases=("rm", "del", "لابردن"))
+    async def remove(self, ctx, index: int):
         queue = self.get_queue(ctx.guild.id)
-
         if 1 <= index <= len(queue):
             removed = queue.pop(index - 1)
-            await ctx.send(
-                f"🗑 **لابردرا:** "
-                f"{removed.get('title', 'گۆرانی')}"
-            )
+            await ctx.send(f"🗑 **لابردرا:** {removed.get('title', 'گۆرانی')}")
         else:
-            await ctx.send(
-                f"❌ ژمارە نادروستە. "
-                f"ڕیز `{len(queue)}` گۆرانی هەیە."
-            )
+            await ctx.send(f"❌ ژمارە نادروستە. ڕیز `{len(queue)}` گۆرانی هەیە.")
 
-    @commands.hybrid_command(
-        name="clearqueue",
-        aliases=("cq", "clearq", "بەتاڵ"),
-    )
-    async def clearqueue(
-        self,
-        ctx: commands.Context,
-    ):
+    @commands.hybrid_command(name="clearqueue", aliases=("cq", "clearq", "بەتاڵ"))
+    async def clearqueue(self, ctx):
         self.queues[ctx.guild.id] = []
-        await ctx.send(
-            "🗑 **ڕیز بەتاڵکرایەوە.**"
-        )
+        await ctx.send("🗑 **ڕیز بەتاڵکرایەوە.**")
 
 
 async def setup(bot: commands.Bot):
