@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from collections import defaultdict, deque
 from datetime import timedelta
 import time
@@ -10,19 +10,29 @@ class AntiSpam(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        # Message timestamps
-        self.messages = defaultdict(lambda: deque(maxlen=15))
+        # =====================================================
+        # Memory / Tracking
+        # =====================================================
+
+        # Messages per user per guild
+        self.messages = defaultdict(lambda: deque(maxlen=20))
 
         # Duplicate messages
-        self.last_messages = defaultdict(lambda: deque(maxlen=5))
+        self.last_messages = defaultdict(lambda: deque(maxlen=6))
 
         # Strikes
         self.strikes = defaultdict(int)
 
-        # Member joins per guild
-        self.joins = defaultdict(lambda: deque(maxlen=50))
+        # Recent joins per guild
+        self.joins = defaultdict(lambda: deque(maxlen=100))
 
-        # Settings
+        # Active raid mode
+        self.raid_mode = {}
+
+        # =====================================================
+        # Anti-Spam Settings
+        # =====================================================
+
         self.max_messages = 5
         self.time_window = 5
 
@@ -34,35 +44,132 @@ class AntiSpam(commands.Cog):
 
         self.timeout_seconds = 60
 
-        # Anti-Raid
+        self.max_strikes = 3
+
+        # =====================================================
+        # Anti-Raid Settings
+        # =====================================================
+
         self.raid_join_limit = 8
         self.raid_time_window = 10
 
-        # Link protection
+        # How long raid protection stays active
+        self.raid_duration = 60
+
+        # =====================================================
+        # Link Protection
+        # =====================================================
+
         self.block_links = True
 
+        # Allowed domains
+        self.allowed_domains = {
+            "discord.com",
+            "discord.gg",
+            "discordapp.com",
+            "github.com",
+            "youtu.be",
+            "youtube.com",
+        }
+
         self.link_pattern = re.compile(
-            r"(https?://|www\.)[^\s]+",
+            r"https?://[^\s]+|www\.[^\s]+",
             re.IGNORECASE
         )
 
+        # Start raid cleanup task
+        self.raid_cleanup.start()
+
     # =========================================================
-    # Permission / Exempt
+    # Unload
+    # =========================================================
+
+    def cog_unload(self):
+        self.raid_cleanup.cancel()
+
+    # =========================================================
+    # Permission Check
     # =========================================================
 
     def is_exempt(self, member: discord.Member):
-        """Admins and moderators are ignored."""
 
-        if member.guild_permissions.administrator:
+        perms = member.guild_permissions
+
+        if perms.administrator:
             return True
 
-        if member.guild_permissions.manage_messages:
+        if perms.manage_messages:
             return True
 
-        if member.guild_permissions.moderate_members:
+        if perms.moderate_members:
             return True
 
         return False
+
+    # =========================================================
+    # User Key
+    # =========================================================
+
+    def user_key(self, guild_id, user_id):
+
+        return (guild_id, user_id)
+
+    # =========================================================
+    # Domain Whitelist
+    # =========================================================
+
+    def is_allowed_domain(self, url):
+
+        try:
+
+            domain = url.lower()
+
+            if "://" in domain:
+                domain = domain.split("://", 1)[1]
+
+            domain = domain.split("/", 1)[0]
+            domain = domain.split(":", 1)[0]
+
+            if domain.startswith("www."):
+                domain = domain[4:]
+
+            for allowed in self.allowed_domains:
+
+                if (
+                    domain == allowed
+                    or domain.endswith("." + allowed)
+                ):
+                    return True
+
+            return False
+
+        except Exception:
+            return False
+
+    # =========================================================
+    # Get Channel For Logs
+    # =========================================================
+
+    def get_log_channel(self, guild):
+
+        # Try system channel first
+        if guild.system_channel:
+            return guild.system_channel
+
+        # Otherwise find a channel where bot can send
+        for channel in guild.text_channels:
+
+            permissions = channel.permissions_for(
+                guild.me
+            )
+
+            if (
+                permissions.send_messages
+                and permissions.embed_links
+            ):
+                return channel
+
+        return None
 
     # =========================================================
     # Punishment
@@ -70,57 +177,101 @@ class AntiSpam(commands.Cog):
 
     async def punish(self, message, reason):
 
+        if not message.guild:
+            return
+
         member = message.author
 
-        self.strikes[member.id] += 1
-        strikes = self.strikes[member.id]
+        key = self.user_key(
+            message.guild.id,
+            member.id
+        )
 
-        # Delete spam message
+        self.strikes[key] += 1
+
+        strikes = self.strikes[key]
+
+        # -----------------------------------------------------
+        # Delete message
+        # -----------------------------------------------------
+
         try:
+
             await message.delete()
-        except (discord.NotFound, discord.Forbidden):
+
+        except (
+            discord.NotFound,
+            discord.Forbidden,
+            discord.HTTPException
+        ):
             pass
 
-        # 3 strikes = timeout
-        if strikes >= 3:
+        # -----------------------------------------------------
+        # Timeout
+        # -----------------------------------------------------
+
+        if strikes >= self.max_strikes:
 
             try:
+
                 await member.timeout(
-                    timedelta(seconds=self.timeout_seconds),
+                    timedelta(
+                        seconds=self.timeout_seconds
+                    ),
                     reason=f"Anti-Spam: {reason}"
                 )
 
-                self.strikes[member.id] = 0
+                self.strikes[key] = 0
 
-                warning = await message.channel.send(
-                    f"🔇 {member.mention} بۆ "
-                    f"**{self.timeout_seconds} چرکە** timeout کرا.\n"
+                text = (
+                    f"🔇 {member.mention} "
+                    f"بۆ **{self.timeout_seconds} چرکە** "
+                    f"timeout کرا.\n"
                     f"📛 هۆکار: **{reason}**"
                 )
 
-                await warning.delete(delay=5)
-
             except discord.Forbidden:
 
-                warning = await message.channel.send(
-                    f"⚠️ نەتوانرا {member.mention} timeout بکرێت.\n"
-                    f"Bot دەبێت `Moderate Members` ـی هەبێت."
+                text = (
+                    f"⚠️ نەتوانرا {member.mention} "
+                    f"timeout بکرێت.\n"
+                    f"Bot پێویستی بە "
+                    f"`Moderate Members` هەیە."
                 )
 
-                await warning.delete(delay=7)
+            except discord.HTTPException:
 
-            except Exception as e:
-                print(f"❌ Timeout error: {e}")
+                text = (
+                    f"⚠️ timeout ـی "
+                    f"{member.mention} سەرکەوتوو نەبوو."
+                )
 
         else:
 
-            warning = await message.channel.send(
-                f"⚠️ {member.mention} **Spam قەدەغەیە!**\n"
-                f"📛 Strike: **{strikes}/3**\n"
+            text = (
+                f"⚠️ {member.mention} "
+                f"**Spam قەدەغەیە!**\n"
+                f"📛 Strike: "
+                f"**{strikes}/{self.max_strikes}**\n"
                 f"هۆکار: **{reason}**"
             )
 
-            await warning.delete(delay=4)
+        # -----------------------------------------------------
+        # Warning
+        # -----------------------------------------------------
+
+        try:
+
+            warning = await message.channel.send(
+                text
+            )
+
+            await warning.delete(
+                delay=5
+            )
+
+        except discord.HTTPException:
+            pass
 
     # =========================================================
     # Message Anti-Spam
@@ -129,31 +280,68 @@ class AntiSpam(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
 
+        # Ignore DMs
         if not message.guild:
             return
 
+        # Ignore bots
         if message.author.bot:
             return
 
         member = message.author
 
+        # Ignore admins/moderators
         if self.is_exempt(member):
             return
+
+        guild_id = message.guild.id
+        user_id = member.id
+
+        key = self.user_key(
+            guild_id,
+            user_id
+        )
 
         now = time.monotonic()
 
         # =====================================================
-        # 1. Flood Spam
+        # RAID MODE
         # =====================================================
 
-        user_messages = self.messages[member.id]
+        raid_expiry = self.raid_mode.get(
+            guild_id,
+            0
+        )
+
+        if raid_expiry > now:
+
+            # During raid mode, normal members cannot spam.
+            # Delete suspicious messages immediately.
+
+            content = message.content.strip()
+
+            if content:
+
+                # Allow commands from moderators only.
+                if content.startswith(
+                    str(self.bot.command_prefix)
+                ):
+                    return
+
+        # =====================================================
+        # 1. Flood
+        # =====================================================
+
+        user_messages = self.messages[key]
 
         user_messages.append(now)
 
         while (
             user_messages
-            and now - user_messages[0] > self.time_window
+            and now - user_messages[0]
+            > self.time_window
         ):
+
             user_messages.popleft()
 
         if len(user_messages) >= self.max_messages:
@@ -164,34 +352,47 @@ class AntiSpam(commands.Cog):
             )
 
             user_messages.clear()
+
             return
+
+        # =====================================================
+        # Content
+        # =====================================================
+
+        content = (
+            message.content
+            .strip()
+            .lower()
+        )
 
         # =====================================================
         # 2. Duplicate Spam
         # =====================================================
 
-        content = message.content.strip().lower()
-
         if content:
 
-            last_messages = self.last_messages[member.id]
+            recent = self.last_messages[key]
 
-            last_messages.append(content)
+            recent.append(content)
 
             duplicate_count = sum(
                 1
-                for msg in last_messages
-                if msg == content
+                for item in recent
+                if item == content
             )
 
-            if duplicate_count >= self.max_duplicates:
+            if (
+                duplicate_count
+                >= self.max_duplicates
+            ):
 
                 await self.punish(
                     message,
                     "دووبارەکردنەوەی هەمان نامە"
                 )
 
-                last_messages.clear()
+                recent.clear()
+
                 return
 
         # =====================================================
@@ -203,7 +404,10 @@ class AntiSpam(commands.Cog):
             + len(message.role_mentions)
         )
 
-        if mention_count >= self.max_mentions:
+        if (
+            mention_count
+            >= self.max_mentions
+        ):
 
             await self.punish(
                 message,
@@ -213,7 +417,7 @@ class AntiSpam(commands.Cog):
             return
 
         # =====================================================
-        # 4. @everyone / @here Spam
+        # 4. Everyone / Here
         # =====================================================
 
         if message.mention_everyone:
@@ -226,141 +430,288 @@ class AntiSpam(commands.Cog):
             return
 
         # =====================================================
-        # 5. Link Spam
+        # 5. Link Protection
         # =====================================================
 
-        if self.block_links and content:
+        if (
+            self.block_links
+            and content
+        ):
 
-            links = self.link_pattern.findall(content)
+            links = self.link_pattern.findall(
+                content
+            )
 
-            if links:
+            blocked_links = [
+                link
+                for link in links
+                if not self.is_allowed_domain(
+                    link
+                )
+            ]
+
+            if blocked_links:
 
                 await self.punish(
                     message,
-                    "ناردنی لینک"
+                    "ناردنی لینکی ڕێگەپێنەدراو"
                 )
 
                 return
 
     # =========================================================
-    # Anti-Raid / Join Spam
+    # Member Join / Anti-Raid
     # =========================================================
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
 
-        if member.bot:
-            # Bot joins are still recorded for raid detection
-            pass
-
         guild = member.guild
+
+        guild_id = guild.id
+
         now = time.monotonic()
 
-        joins = self.joins[guild.id]
+        joins = self.joins[guild_id]
 
         joins.append(now)
 
+        # Remove old joins
         while (
             joins
-            and now - joins[0] > self.raid_time_window
+            and now - joins[0]
+            > self.raid_time_window
         ):
+
             joins.popleft()
 
         # =====================================================
-        # Raid detected
+        # Raid Detection
         # =====================================================
 
-        if len(joins) >= self.raid_join_limit:
+        if (
+            len(joins)
+            >= self.raid_join_limit
+        ):
 
-            print(
-                f"🚨 Anti-Raid: {guild.name} "
-                f"{len(joins)} joins detected"
+            await self.activate_raid(
+                guild,
+                len(joins)
             )
 
-            # Try to notify system channel
-            channel = guild.system_channel
-
-            if channel:
-
-                try:
-                    warning = await channel.send(
-                        f"🚨 **ANTI-RAID ACTIVATED**\n"
-                        f"لە ماوەی {self.raid_time_window} چرکەدا "
-                        f"**{len(joins)}** ئەندام هاتنە ناو سێرڤەر.\n"
-                        f"🛡️ سیستەمی دژەRaid چالاک بوو."
-                    )
-
-                    await warning.delete(delay=10)
-
-                except discord.Forbidden:
-                    pass
-
-            # If the newly joined member is a bot,
-            # remove it during an active raid.
+            # Kick bots that join during raid
             if member.bot:
 
                 try:
+
                     await member.kick(
-                        reason="Anti-Raid: Bot joined during raid"
+                        reason=(
+                            "Anti-Raid: "
+                            "Bot joined during raid"
+                        )
                     )
 
-                except discord.Forbidden:
+                except (
+                    discord.Forbidden,
+                    discord.HTTPException
+                ):
+
                     pass
 
-                except Exception as e:
-                    print(
-                        f"❌ Anti-Raid kick error: {e}"
-                    )
+    # =========================================================
+    # Activate Raid Mode
+    # =========================================================
+
+    async def activate_raid(
+        self,
+        guild,
+        join_count
+    ):
+
+        guild_id = guild.id
+
+        now = time.monotonic()
+
+        already_active = (
+            self.raid_mode.get(
+                guild_id,
+                0
+            ) > now
+        )
+
+        # Extend raid mode
+        self.raid_mode[guild_id] = (
+            now + self.raid_duration
+        )
+
+        # Don't spam notifications
+        if already_active:
+            return
+
+        print(
+            f"🚨 Anti-Raid activated: "
+            f"{guild.name} "
+            f"({join_count} joins)"
+        )
+
+        channel = self.get_log_channel(
+            guild
+        )
+
+        if not channel:
+            return
+
+        try:
+
+            warning = await channel.send(
+                f"🚨 **ANTI-RAID ACTIVATED**\n\n"
+                f"👥 Join ـەکان: "
+                f"**{join_count}**\n"
+                f"⏱️ ماوە: "
+                f"**{self.raid_time_window} چرکە**\n"
+                f"🔒 Raid Mode: "
+                f"**{self.raid_duration} چرکە**\n\n"
+                f"🛡️ سیستەمی پاراستن چالاک کرا."
+            )
+
+            await warning.delete(
+                delay=10
+            )
+
+        except discord.HTTPException:
+            pass
 
     # =========================================================
-    # Anti-Raid Status Command
+    # Raid Cleanup
+    # =========================================================
+
+    @tasks.loop(seconds=5)
+    async def raid_cleanup(self):
+
+        now = time.monotonic()
+
+        expired = [
+            guild_id
+            for guild_id, expiry
+            in self.raid_mode.items()
+            if expiry <= now
+        ]
+
+        for guild_id in expired:
+
+            self.raid_mode.pop(
+                guild_id,
+                None
+            )
+
+            print(
+                f"✅ Raid Mode بەسەرچوو "
+                f"بۆ guild: {guild_id}"
+            )
+
+    @raid_cleanup.before_loop
+    async def before_raid_cleanup(self):
+
+        await self.bot.wait_until_ready()
+
+    # =========================================================
+    # Raid Status
     # =========================================================
 
     @commands.command(
         name="raidstatus",
-        aliases=["raid", "antiraid"]
+        aliases=[
+            "raid",
+            "antiraid"
+        ]
     )
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(
+        administrator=True
+    )
     async def raidstatus(self, ctx):
 
-        joins = self.joins[ctx.guild.id]
+        guild_id = ctx.guild.id
 
         now = time.monotonic()
 
-        recent = [
-            x for x in joins
-            if now - x <= self.raid_time_window
+        joins = [
+            timestamp
+            for timestamp
+            in self.joins[guild_id]
+            if now - timestamp
+            <= self.raid_time_window
         ]
+
+        active = (
+            self.raid_mode.get(
+                guild_id,
+                0
+            ) > now
+        )
 
         embed = discord.Embed(
             title="🛡️ Anti-Raid Status",
-            color=0x2ecc71
+            color=(
+                0xe74c3c
+                if active
+                else 0x2ecc71
+            )
         )
+
+        if active:
+
+            remaining = (
+                self.raid_mode[guild_id]
+                - now
+            )
+
+            embed.description = (
+                "🚨 **RAID MODE چالاکە**"
+            )
+
+            embed.add_field(
+                name="⏳ ماوەی ماوە",
+                value=(
+                    f"{remaining:.0f} چرکە"
+                ),
+                inline=False
+            )
+
+        else:
+
+            embed.description = (
+                "✅ هیچ Raid ـێکی "
+                "چالاک نییە."
+            )
 
         embed.add_field(
             name="👥 Joins",
-            value=str(len(recent)),
+            value=str(
+                len(joins)
+            ),
             inline=True
         )
 
         embed.add_field(
             name="🚨 Raid Limit",
-            value=str(self.raid_join_limit),
+            value=str(
+                self.raid_join_limit
+            ),
             inline=True
         )
 
         embed.add_field(
-            name="⏱️ Time Window",
-            value=f"{self.raid_time_window} چرکە",
+            name="⏱️ Window",
+            value=(
+                f"{self.raid_time_window} "
+                f"چرکە"
+            ),
             inline=True
         )
 
-        if len(recent) >= self.raid_join_limit:
-            embed.description = "🚨 **RAID DETECTED**"
-        else:
-            embed.description = "✅ هیچ Raid ـێکی چالاک نییە."
-
-        await ctx.send(embed=embed)
+        await ctx.send(
+            embed=embed
+        )
 
     # =========================================================
     # Anti-Spam Status
@@ -368,64 +719,114 @@ class AntiSpam(commands.Cog):
 
     @commands.command(
         name="antispam",
-        aliases=["spamsettings"]
+        aliases=[
+            "spamsettings"
+        ]
     )
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(
+        administrator=True
+    )
     async def antispam(self, ctx):
 
         embed = discord.Embed(
             title="🛡️ Anti-Spam System",
-            description="سیستەمی دژەسپام چالاکە.",
+            description=(
+                "سیستەمی دژەسپام "
+                "چالاکە."
+            ),
             color=0x2ecc71
         )
 
         embed.add_field(
             name="💬 Flood",
-            value=f"{self.max_messages} نامە / "
-                  f"{self.time_window} چرکە",
+            value=(
+                f"{self.max_messages} "
+                f"نامە / "
+                f"{self.time_window} چرکە"
+            ),
             inline=False
         )
 
         embed.add_field(
             name="🔁 Duplicate",
-            value=f"{self.max_duplicates} جار",
+            value=(
+                f"{self.max_duplicates} جار"
+            ),
             inline=False
         )
 
         embed.add_field(
             name="📢 Mention",
-            value=f"{self.max_mentions} mention",
+            value=(
+                f"{self.max_mentions} mention"
+            ),
             inline=False
         )
 
         embed.add_field(
-            name="📣 Everyone/Here",
+            name="📣 Everyone / Here",
             value="چالاکە",
             inline=False
         )
 
         embed.add_field(
-            name="🔗 Link Spam",
-            value="چالاکە",
+            name="🔗 Link Filter",
+            value=(
+                "چالاکە + Whitelist"
+            ),
             inline=False
         )
 
         embed.add_field(
             name="🚨 Anti-Raid",
-            value=f"{self.raid_join_limit} join / "
-                  f"{self.raid_time_window} چرکە",
+            value=(
+                f"{self.raid_join_limit} "
+                f"join / "
+                f"{self.raid_time_window} "
+                f"چرکە"
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="🔒 Raid Mode",
+            value=(
+                f"{self.raid_duration} "
+                f"چرکە"
+            ),
             inline=False
         )
 
         embed.add_field(
             name="🔇 Punishment",
-            value=f"3 strikes → "
-                  f"{self.timeout_seconds} چرکە timeout",
+            value=(
+                f"{self.max_strikes} "
+                f"strikes → "
+                f"{self.timeout_seconds} "
+                f"چرکە timeout"
+            ),
             inline=False
         )
 
-        await ctx.send(embed=embed)
+        embed.add_field(
+            name="✅ Allowed Links",
+            value=(
+                "Discord • GitHub • YouTube"
+            ),
+            inline=False
+        )
 
+        await ctx.send(
+            embed=embed
+        )
+
+
+# =========================================================
+# Setup
+# =========================================================
 
 async def setup(bot):
-    await bot.add_cog(AntiSpam(bot))
+
+    await bot.add_cog(
+        AntiSpam(bot)
+    )
