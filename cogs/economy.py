@@ -3,27 +3,32 @@ from discord.ext import commands
 import random
 import json
 import os
-from datetime import datetime as dt
+import tempfile
+from pathlib import Path
+from datetime import datetime as dt, timezone
 
 
 class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.data_file = "economy_data.json"
+        self.data_file = Path(__file__).resolve().parent.parent / "data" / "economy_data.json"
+        self.data_file.parent.mkdir(parents=True, exist_ok=True)
         self.data = self.load_data()
 
     def load_data(self):
         if os.path.exists(self.data_file):
             try:
-                with open(self.data_file, "r") as f:
+                with self.data_file.open("r", encoding="utf-8") as f:
                     return json.load(f)
-            except:
+            except (OSError, ValueError, TypeError):
                 return {}
         return {}
 
     def save_data(self):
-        with open(self.data_file, "w") as f:
-            json.dump(self.data, f, indent=4)
+        temp_path = self.data_file.with_suffix(".tmp")
+        with temp_path.open("w", encoding="utf-8") as f:
+            json.dump(self.data, f, indent=4, ensure_ascii=False)
+        os.replace(temp_path, self.data_file)
 
     def get_user(self, user_id):
         user_id = str(user_id)
@@ -59,7 +64,7 @@ class Economy(commands.Cog):
     async def daily(self, ctx):
         """وەرگرتنی دیاری ڕۆژانە"""
         user = self.get_user(ctx.author.id)
-        today = dt.now().strftime("%Y-%m-%d")
+        today = dt.now(timezone.utc).strftime("%Y-%m-%d")
         if user.get("last_daily") == today:
             return await ctx.send("⏰ **پێشتر دیاری ڕۆژانەت وەرگرتووە!** سبەی بێرەوە")
         amount = random.randint(50, 200)
@@ -85,8 +90,9 @@ class Economy(commands.Cog):
         job, salary = random.choice(jobs)
         bonus = random.randint(-20, 50)
         total = max(salary + bonus, 10)
+        xp_gain = random.randint(5, 15)
         user["balance"] += total
-        user["xp"] += random.randint(5, 15)
+        user["xp"] += xp_gain
         if user["xp"] >= user["level"] * 100:
             user["level"] += 1
             user["xp"] = 0
@@ -124,6 +130,10 @@ class Economy(commands.Cog):
     @commands.command(name="transfer", aliases=["give", "pay", "ناردن"])
     async def transfer(self, ctx, member: discord.Member, amount: int):
         """ناردنی پارە بۆ ئەندامێکی تر"""
+        if member == ctx.author:
+            return await ctx.send("❌ ناتوانیت پارە بۆ خۆت بنێریت.")
+        if member.bot:
+            return await ctx.send("❌ ناتوانیت پارە بۆ Bot بنێریت.")
         if amount < 1:
             return await ctx.send("❌ بڕی پارە نادروستە")
         user = self.get_user(ctx.author.id)
