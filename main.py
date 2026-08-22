@@ -280,25 +280,53 @@ async def load_cogs():
 # SYNC SLASH COMMANDS
 # ============================================================
 
+_slash_sync_lock = asyncio.Lock()
+_slash_commands_synced = False
+
+
 async def sync_slash_commands():
     """
-    Sync all hybrid/slash commands globally.
+    Sync all slash commands globally without blocking bot startup.
+    Global command sync can take a little while, so it is NOT run
+    inside setup_hook().
     """
 
-    try:
+    global _slash_commands_synced
 
-        synced = await bot.tree.sync()
+    if _slash_commands_synced:
+        return
 
-        logger.info(
-            "Global Slash Commands synced: %s",
-            len(synced),
-        )
+    async with _slash_sync_lock:
+        if _slash_commands_synced:
+            return
 
-    except Exception:
+        logger.info("Starting global Slash Command sync...")
 
-        logger.exception(
-            "Failed to sync slash commands.",
-        )
+        try:
+            # Prevent a slow Discord API request from making the
+            # Railway container appear frozen forever.
+            synced = await asyncio.wait_for(
+                bot.tree.sync(),
+                timeout=90,
+            )
+
+            _slash_commands_synced = True
+
+            logger.info(
+                "Global Slash Commands synced: %s",
+                len(synced),
+            )
+
+        except asyncio.TimeoutError:
+            logger.error(
+                "Global Slash Command sync timed out after 90 seconds. "
+                "Bot remains online; sync will retry after reconnect."
+            )
+
+        except Exception:
+            logger.exception(
+                "Failed to sync slash commands."
+            )
 
 
 # ============================================================
@@ -306,24 +334,13 @@ async def sync_slash_commands():
 # ============================================================
 
 async def setup_hook():
-
-    # --------------------------------------------------------
-    # 1. Load Application Emojis
-    # --------------------------------------------------------
+    """
+    Load emojis and cogs before Gateway login.
+    Slash-command sync is intentionally started after on_ready().
+    """
 
     await load_application_emojis()
-
-    # --------------------------------------------------------
-    # 2. Load Cogs
-    # --------------------------------------------------------
-
     await load_cogs()
-
-    # --------------------------------------------------------
-    # 3. Sync Slash Commands
-    # --------------------------------------------------------
-
-    await sync_slash_commands()
 
 
 bot.setup_hook = setup_hook
@@ -397,7 +414,13 @@ async def on_ready():
         len(HMB_EMOJIS),
     )
 
+    # Set the bot presence immediately after Gateway login.
     await update_hmb_presence()
+
+    # Sync Slash Commands in the background so a slow global
+    # Discord API request can never block the bot from becoming ready.
+    if not _slash_commands_synced:
+        asyncio.create_task(sync_slash_commands())
 
 
 # ============================================================
