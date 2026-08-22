@@ -75,7 +75,7 @@ class Info(commands.Cog):
             msg += f"- **{guild.name}** - {guild.member_count} ئەندام\n"
         await ctx.send(msg[:2000])
 
-    @commands.command(name="invite", aliases=["inv", "بانگهێشت"])
+    @commands.command(name="invite", aliases=["invitebot", "بانگهێشت"])
     async def invite(self, ctx):
         """لینکی بانگهێشتکردنی بۆت"""
         perms = discord.Permissions(
