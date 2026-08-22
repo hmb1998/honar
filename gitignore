@@ -1,5 +1,8 @@
 __pycache__/
 *.py[cod]
+*.log
 .env
-economy_data.json
-*.tmp
+.venv/
+venv/
+data/economy_data.json
+data/economy_data.tmp
