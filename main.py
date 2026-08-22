@@ -5,7 +5,13 @@ from datetime import datetime, timezone
 import discord
 from discord.ext import commands
 
-from config import DISCORD_TOKEN, PREFIX, HMB_APPLICATION_ID, HMB_PRESENCE_NAME, HMB_PRESENCE_STATE
+from config import (
+    DISCORD_TOKEN,
+    PREFIX,
+    HMB_APPLICATION_ID,
+    HMB_PRESENCE_NAME,
+    HMB_PRESENCE_STATE,
+)
 
 
 # ============================================================
@@ -219,6 +225,219 @@ def get_hmb_emoji(
     return HMB_EMOJIS.get(number)
 
 
+
+# ============================================================
+# HMB SERVER CUSTOM EMOJI SYNC
+# ============================================================
+#
+# Application Emojis are NOT shown in Discord's normal server
+# emoji picker. This sync copies the 10 Application Emojis into
+# a target Discord server as normal Custom Emojis.
+#
+# Railway variable (recommended):
+#
+#   HMB_EMOJI_GUILD_ID=YOUR_SERVER_ID
+#
+# If it is empty and the bot is in exactly one server, that
+# server is used automatically.
+# ============================================================
+
+HMB_SERVER_EMOJI_NAMES = {
+    1: "hmb_01",
+    2: "hmb_02",
+    3: "hmb_03",
+    4: "hmb_04",
+    5: "hmb_05",
+    6: "hmb_06",
+    7: "hmb_07",
+    8: "hmb_08",
+    9: "hmb_09",
+    10: "hmb_10",
+}
+
+
+def get_hmb_emoji_guilds() -> list[discord.Guild]:
+    """Return every server where the bot is currently installed.
+
+    HMB NEXUS server emojis are synchronized to ALL guilds the bot
+    can see. This means no HMB_EMOJI_GUILD_ID is required.
+    """
+    return list(bot.guilds)
+
+
+async def sync_hmb_server_emojis(
+    guild: discord.Guild | None = None,
+) -> tuple[int, int, int]:
+    """
+    Copy the 10 HMB Application Emojis into a server as Custom Emojis.
+
+    Returns:
+        (created, already_exists, failed)
+    """
+    if guild is None:
+        guilds = get_hmb_emoji_guilds()
+        if not guilds:
+            logger.warning(
+                "HMB server emoji sync skipped: set HMB_EMOJI_GUILD_ID "
+                "when the bot is in multiple servers."
+            )
+            return (0, 0, 0)
+        guild = guilds[0]
+
+    me = guild.me
+    if me is None:
+        try:
+            me = await guild.fetch_member(bot.user.id)
+        except discord.HTTPException:
+            me = None
+
+    if me is None or not me.guild_permissions.manage_emojis_and_stickers:
+        logger.error(
+            "Cannot sync HMB server emojis in %s: "
+            "bot needs Manage Expressions permission.",
+            guild.name,
+        )
+        return (0, 0, 10)
+
+    created = 0
+    already_exists = 0
+    failed = 0
+
+    logger.info(
+        "Syncing HMB server emojis to: %s (%s)",
+        guild.name,
+        guild.id,
+    )
+
+    for number in range(1, 11):
+        app_emoji = HMB_EMOJIS.get(number)
+        if app_emoji is None:
+            failed += 1
+            logger.error(
+                "HMB server emoji %s skipped: application emoji not loaded.",
+                number,
+            )
+            continue
+
+        name = HMB_SERVER_EMOJI_NAMES[number]
+
+        existing = discord.utils.get(guild.emojis, name=name)
+        if existing is not None:
+            already_exists += 1
+            logger.info(
+                "HMB Server Emoji %s already exists: %s (%s)",
+                number,
+                existing.name,
+                existing.id,
+            )
+            continue
+
+        try:
+            image_bytes = await app_emoji.url.read()
+
+            await guild.create_custom_emoji(
+                name=name,
+                image=image_bytes,
+                reason="HMB NEXUS Application Emoji sync",
+            )
+
+            created += 1
+            logger.info(
+                "Created HMB Server Emoji %s: %s",
+                number,
+                name,
+            )
+
+        except discord.Forbidden:
+            failed += 1
+            logger.error(
+                "Discord denied creation of HMB Server Emoji %s in %s. "
+                "Check Manage Expressions permission.",
+                number,
+                guild.name,
+            )
+
+        except discord.HTTPException as error:
+            failed += 1
+            logger.error(
+                "Discord API error creating HMB Server Emoji %s: %s",
+                number,
+                error,
+            )
+
+        except Exception:
+            failed += 1
+            logger.exception(
+                "Unexpected error creating HMB Server Emoji %s",
+                number,
+            )
+
+    logger.info(
+        "HMB Server Emoji sync finished: created=%s | existing=%s | failed=%s",
+        created,
+        already_exists,
+        failed,
+    )
+
+    return created, already_exists, failed
+
+
+async def auto_sync_hmb_server_emojis():
+    """Synchronize all 10 HMB emojis to EVERY server containing the bot."""
+    guilds = get_hmb_emoji_guilds()
+
+    if not guilds:
+        logger.info("HMB Server Emoji auto-sync: bot is not in any server yet.")
+        return
+
+    logger.info(
+        "Starting HMB Server Emoji auto-sync for %s server(s)...",
+        len(guilds),
+    )
+
+    total_created = 0
+    total_existing = 0
+    total_failed = 0
+
+    for index, guild in enumerate(guilds, start=1):
+        try:
+            created, existing, failed = await sync_hmb_server_emojis(guild)
+            total_created += created
+            total_existing += existing
+            total_failed += failed
+
+            logger.info(
+                "HMB Emoji sync [%s/%s] %s (%s): created=%s | existing=%s | failed=%s",
+                index,
+                len(guilds),
+                guild.name,
+                guild.id,
+                created,
+                existing,
+                failed,
+            )
+
+        except Exception:
+            logger.exception(
+                "HMB Server Emoji auto-sync failed for %s (%s).",
+                guild.name,
+                guild.id,
+            )
+            total_failed += 10
+
+        # Small pause between guilds to be friendly to Discord rate limits.
+        if index < len(guilds):
+            await asyncio.sleep(1)
+
+    logger.info(
+        "HMB Server Emoji ALL-SERVER sync finished: servers=%s | created=%s | existing=%s | failed=%s",
+        len(guilds),
+        total_created,
+        total_existing,
+        total_failed,
+    )
+
+
 # ============================================================
 # MAKE EMOJIS AVAILABLE TO ALL COGS
 # ============================================================
@@ -226,6 +445,7 @@ def get_hmb_emoji(
 bot.hmb_emojis = HMB_EMOJIS
 bot.hmb_emoji = hmb_emoji
 bot.get_hmb_emoji = get_hmb_emoji
+bot.sync_hmb_server_emojis = sync_hmb_server_emojis
 
 
 # ============================================================
@@ -417,6 +637,10 @@ async def on_ready():
 
     # Set the bot presence immediately after Gateway login.
     await update_hmb_presence()
+
+    # Copy Application Emojis into normal Server Custom Emojis so
+    # they appear in Discord's emoji picker.
+    await auto_sync_hmb_server_emojis()
 
     # Sync Slash Commands in the background so a slow global
     # Discord API request can never block the bot from becoming ready.

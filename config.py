@@ -32,3 +32,16 @@ HMB_PRESENCE_STATE = os.getenv(
     "HMB_PRESENCE_STATE",
     "Music • Moderation • Games • Economy",
 ).strip() or "Music • Moderation • Games • Economy"
+
+
+# ============================================================
+# HMB SERVER EMOJI SYNC
+# ============================================================
+#
+# HMB NEXUS now syncs its 10 Server Custom Emojis to EVERY
+# server where the bot is installed. No guild ID is required.
+#
+# This legacy variable is kept only for compatibility with older
+# Railway environments; the current main.py intentionally ignores it.
+# ============================================================
+HMB_EMOJI_GUILD_ID = os.getenv("HMB_EMOJI_GUILD_ID", "").strip()

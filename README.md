@@ -51,3 +51,47 @@ Therefore:
 - A local Rich Presence companion must run on the same computer as Discord Desktop if you want the user's profile to show the large/small Rich Presence artwork through local RPC.
 
 See `rich_presence/README.md` for the local companion.
+
+
+## Make the 10 HMB emojis appear in the Discord Emoji Picker
+
+Application Emojis are different from normal Server Custom Emojis. The
+bot now includes a safe sync system that copies the 10 Application Emojis
+into the target server.
+
+Recommended Railway variable:
+
+```text
+HMB_EMOJI_GUILD_ID=YOUR_DISCORD_SERVER_ID
+```
+
+If the bot is in exactly one server, this variable can be left empty and
+that server is selected automatically.
+
+The bot needs **Manage Expressions** (Manage Emojis and Stickers).
+
+You can also run:
+
+```text
+/hmb_sync_emojis
+```
+
+The command is restricted to users with **Manage Expressions**.
+
+The server emoji names are:
+
+```text
+hmb_01
+hmb_02
+hmb_03
+hmb_04
+hmb_05
+hmb_06
+hmb_07
+hmb_08
+hmb_09
+hmb_10
+```
+
+The startup sync does not create duplicates: if an emoji with the same
+name already exists, it is left alone.
