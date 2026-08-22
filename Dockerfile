@@ -16,4 +16,4 @@ RUN python -m pip install --upgrade pip \
 
 COPY . .
 
-CMD ["python", "main.py"]
+CMD ["sh", "-c", "python web_server.py & python main.py"]
