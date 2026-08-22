@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import re
 from typing import Optional
 
@@ -16,13 +17,25 @@ FFMPEG_OPTIONS = {
     "options": "-vn",
 }
 
+# YouTube can challenge hosted IPs with bot verification.
+# Optional Railway variable: YOUTUBE_COOKIE=<Cookie header value>
+YOUTUBE_COOKIE = os.getenv("YOUTUBE_COOKIE", "").strip()
+
 YDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
     "default_search": "ytsearch",
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["android", "web"],
+        }
+    },
 }
+
+if YOUTUBE_COOKIE:
+    YDL_OPTIONS["http_headers"] = {"Cookie": YOUTUBE_COOKIE}
 
 YOUTUBE_URL = re.compile(
     r"^(https?://)?(www\.)?(youtube\.com|youtu\.be)/",
@@ -63,6 +76,19 @@ class Music(commands.Cog):
 
     async def _resolve(self, query: str) -> Optional[dict]:
         return await asyncio.to_thread(self._extract, query)
+
+    async def _send_play_error(self, ctx: commands.Context, exc: Exception):
+        text = str(exc)
+        lowered = text.lower()
+
+        if "sign in to confirm" in lowered or "cookies" in lowered or "bot" in lowered:
+            await ctx.send(
+                "❌ YouTube داواکاری Login/Cookie دەکات.\n"
+                "لە Railway ـدا `YOUTUBE_COOKIE` دابنێ، پاشان Redeploy بکە."
+            )
+            return
+
+        await ctx.send(f"❌ هەڵە لە ژەنین: `{text[:500]}`")
 
     async def _play_song(self, ctx: commands.Context, song: dict):
         voice = ctx.voice_client
@@ -114,7 +140,7 @@ class Music(commands.Cog):
 
         except Exception as exc:
             logger.exception("Music playback failed")
-            await ctx.send(f"❌ هەڵە لە ژەنین: `{exc}`")
+            await self._send_play_error(ctx, exc)
 
     async def play_next(self, ctx: commands.Context):
         guild_id = ctx.guild.id
@@ -153,7 +179,14 @@ class Music(commands.Cog):
         elif not voice:
             voice = await target_channel.connect()
 
-        song = await self._resolve(query if YOUTUBE_URL.match(query) else f"ytsearch:{query}")
+        try:
+            target = query.strip()
+            source_query = target if YOUTUBE_URL.match(target) else f"ytsearch:{target}"
+            song = await self._resolve(source_query)
+        except Exception as exc:
+            logger.exception("YouTube resolve failed for %r", query)
+            await self._send_play_error(ctx, exc)
+            return
 
         if not song:
             return await ctx.send("❌ هیچ گۆرانییەک نەدۆزرایەوە.")
