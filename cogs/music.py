@@ -3,6 +3,7 @@ import logging
 import os
 import json
 import re
+import shlex
 from typing import Optional
 from urllib.parse import quote, urlparse, parse_qs
 from urllib.request import Request, urlopen
@@ -102,8 +103,8 @@ class Music(commands.Cog):
                     "youtube": {
                         "player_client": [client],
                     },
-                    "youtubepot-bgutilhttp": {
-                        "base_url": YOUTUBE_POT_PROVIDER_URL,
+                    "youtubepot-bgutilscript": {
+                        "server_home": "/opt/bgutil-ytdlp-pot-provider/server",
                     },
                 },
             }
@@ -122,6 +123,7 @@ class Music(commands.Cog):
                     info = entries[0]
 
                 stream_url = info.get("url")
+                stream_headers = dict(info.get("http_headers") or {})
 
                 if not stream_url:
                     formats = [
@@ -138,6 +140,7 @@ class Music(commands.Cog):
                             reverse=True,
                         )
                         stream_url = formats[0].get("url")
+                        stream_headers = dict(formats[0].get("http_headers") or stream_headers)
 
                 if not stream_url:
                     continue
@@ -147,6 +150,7 @@ class Music(commands.Cog):
                     or info.get("original_url")
                     or query,
                     "stream_url": stream_url,
+                    "stream_headers": stream_headers,
                     "title": info.get("title", "نەناسراو"),
                     "duration": int(info.get("duration") or 0),
                     "thumbnail": info.get("thumbnail"),
@@ -284,6 +288,7 @@ class Music(commands.Cog):
                 return {
                     "url": f"https://www.youtube.com/watch?v={current_id}",
                     "stream_url": audio["url"],
+                    "stream_headers": {"User-Agent": "Mozilla/5.0"},
                     "title": data.get("title") or "نەناسراو",
                     "duration": int(data.get("duration") or 0),
                     "thumbnail": data.get("thumbnailUrl")
@@ -368,6 +373,7 @@ class Music(commands.Cog):
                 return {
                     "url": f"https://www.youtube.com/watch?v={video_id}",
                     "stream_url": fmt["url"],
+                    "stream_headers": {"User-Agent": "Mozilla/5.0"},
                     "title": data.get("title", "نەناسراو"),
                     "duration": int(data.get("lengthSeconds") or 0),
                     "thumbnail": thumb,
@@ -461,10 +467,25 @@ class Music(commands.Cog):
                 )
                 return
 
+            stream_headers = dict(info.get("stream_headers") or {})
+            # YouTube signed googlevideo URLs can return HTTP 403 if ffmpeg
+            # does not reuse the headers yt-dlp used while resolving the stream.
+            # Pass the same headers to ffmpeg without storing cookies.
+            header_blob = "\r\n".join(
+                f"{k}: {v}" for k, v in stream_headers.items()
+                if v is not None and str(v).strip()
+            )
+            ffmpeg_before = FFMPEG_OPTIONS["before_options"]
+            if header_blob:
+                ffmpeg_before = (
+                    f'{ffmpeg_before} -headers {shlex.quote(header_blob + chr(13) + chr(10))}'
+                )
+
             source = discord.PCMVolumeTransformer(
                 discord.FFmpegPCMAudio(
                     info["stream_url"],
-                    **FFMPEG_OPTIONS,
+                    before_options=ffmpeg_before,
+                    options=FFMPEG_OPTIONS["options"],
                 ),
                 volume=1.0,
             )

@@ -89,11 +89,27 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 HMB NEXUS Music Search"):
                     ephemeral=True,
                 )
 
-            ctx = await commands.Context.from_interaction(interaction)
-            await music._play_song(ctx, song)
-            await interaction.followup.send(
-                f"▶️ **دەستی پێکرد:** {song['title']}", ephemeral=True
-            )
+            # This is a component/modal interaction, not a slash-command
+            # interaction. commands.Context.from_interaction() therefore
+            # raises: "interaction does not have command data".
+            # _play_song only needs a tiny context-like adapter.
+            class PanelContext:
+                guild = guild
+                author = interaction.user
+
+                @property
+                def voice_client(self):
+                    return guild.voice_client
+
+                async def send(self, content=None, **kwargs):
+                    kwargs.setdefault("ephemeral", True)
+                    return await interaction.followup.send(
+                        content=content, **kwargs
+                    )
+
+            await music._play_song(PanelContext(), song)
+            # _play_song already reports the playback result.
+
         except Exception as exc:
             logger.exception("Music panel playback failed")
             await interaction.followup.send(
