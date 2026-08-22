@@ -22,6 +22,45 @@ class HMB(commands.Cog):
         embed.set_footer(text=f"Loaded: {loaded}/10 • HMB NEXUS")
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(
+        name="hmb_sync_emojis",
+        description="Sync the 10 HMB emojis into this server's emoji picker",
+    )
+    @app_commands.default_permissions(manage_emojis_and_stickers=True)
+    async def hmb_sync_emojis(self, interaction: discord.Interaction):
+        """Copy HMB Application Emojis into normal Server Custom Emojis."""
+
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "❌ ئەم command ـە تەنها لە ناو Server کار دەکات.",
+                ephemeral=True,
+            )
+            return
+
+        me = interaction.guild.me
+        if me is None or not me.guild_permissions.manage_emojis_and_stickers:
+            await interaction.response.send_message(
+                "❌ بۆت پێویستی بە **Manage Expressions** هەیە.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        created, existing, failed = await self.bot.sync_hmb_server_emojis(
+            interaction.guild
+        )
+
+        await interaction.followup.send(
+            "✅ **HMB NEXUS Emoji Sync**\n"
+            f"🆕 دروستکراو: **{created}**\n"
+            f"♻️ پێشتر هەبوو: **{existing}**\n"
+            f"❌ سەرکەوتوو نەبوو: **{failed}**\n\n"
+            "ئێستا Emoji ـەکان دەبێت لە Emoji Picker ـی Server ـەکەدا "
+            "دەربکەون.",
+            ephemeral=True,
+        )
+
     @app_commands.command(name="hmb_status", description="Show HMB NEXUS bot systems status")
     async def hmb_status(self, interaction: discord.Interaction):
         loaded_emojis = sum(1 for i in range(1, 11) if self.bot.get_hmb_emoji(i) is not None)
