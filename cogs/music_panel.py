@@ -94,20 +94,40 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 HMB NEXUS Music Search"):
             # raises: "interaction does not have command data".
             # _play_song only needs a tiny context-like adapter.
             class PanelContext:
-                guild = guild
-                author = interaction.user
+                """Small Context-like adapter for component/modal interactions.
+
+                commands.Context.from_interaction() cannot be used here because
+                buttons and modals do not carry slash-command data.
+                """
+
+                def __init__(
+                    self,
+                    guild: discord.Guild,
+                    author: discord.Member | discord.User,
+                    interaction: discord.Interaction,
+                ):
+                    self.guild = guild
+                    self.author = author
+                    self.interaction = interaction
 
                 @property
                 def voice_client(self):
-                    return guild.voice_client
+                    return self.guild.voice_client
 
                 async def send(self, content=None, **kwargs):
                     kwargs.setdefault("ephemeral", True)
-                    return await interaction.followup.send(
+                    return await self.interaction.followup.send(
                         content=content, **kwargs
                     )
 
-            await music._play_song(PanelContext(), song)
+            await music._play_song(
+                PanelContext(
+                    guild=guild,
+                    author=interaction.user,
+                    interaction=interaction,
+                ),
+                song,
+            )
             # _play_song already reports the playback result.
 
         except Exception as exc:
