@@ -1,310 +1,102 @@
-import discord
-from discord.ext import commands
 import asyncio
 import logging
+from datetime import datetime, timezone
+
+import discord
+from discord.ext import commands
 
 from config import DISCORD_TOKEN, PREFIX
 
-
-# =========================================================
-# Logging
-# =========================================================
-
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
+    format="%(asctime)s | %(levelname)s | %(message)s",
 )
-
 logger = logging.getLogger("honar")
-
-
-# =========================================================
-# Bot Settings
-# =========================================================
 
 intents = discord.Intents.all()
 
 bot = commands.Bot(
     command_prefix=PREFIX,
     intents=intents,
-    help_command=None
+    help_command=None,
 )
 
 
-# =========================================================
-# Bot Ready
-# =========================================================
-
 @bot.event
 async def on_ready():
-
-    print("")
-    print("========================================")
+    print("\n========================================")
     print(f"✅ {bot.user} ئامادەیە!")
     print(f"🆔 ID: {bot.user.id}")
     print(f"🏠 Servers: {len(bot.guilds)}")
     print(f"🧩 Cogs: {len(bot.cogs)}")
-    print("========================================")
-    print("")
-
+    print("========================================\n")
     await bot.change_presence(
         activity=discord.Activity(
             type=discord.ActivityType.listening,
-            name=f"{PREFIX}help | {len(bot.cogs)} کۆگ"
+            name=f"{PREFIX}help | {len(bot.cogs)} کۆگ",
         )
     )
 
-
-# =========================================================
-# Disconnect / Resume
-# =========================================================
 
 @bot.event
 async def on_resumed():
-
     logger.info("🔄 Discord connection resumed.")
 
 
-# =========================================================
-# Command Error Handler
-# =========================================================
-
 @bot.event
 async def on_command_error(ctx, error):
-
-    # Ignore errors already handled by commands
-    if hasattr(ctx.command, "on_error"):
+    if isinstance(error, commands.CommandNotFound):
         return
+    if isinstance(error, commands.MissingPermissions):
+        return await ctx.send("❌ تۆ ڕێگەپێدانی ئەم کارەت نییە.")
+    if isinstance(error, commands.BotMissingPermissions):
+        return await ctx.send("❌ بۆت ڕێگەپێدانی ئەم کارەی نییە.")
+    if isinstance(error, commands.MissingRequiredArgument):
+        return await ctx.send(f"❌ ئەرگومێنتێک کەمە. `{PREFIX}help` بەکاربهێنە.")
+    if isinstance(error, commands.MemberNotFound):
+        return await ctx.send("❌ ئەندام نەدۆزرایەوە.")
+    if isinstance(error, commands.ChannelNotFound):
+        return await ctx.send("❌ چانێل نەدۆزرایەوە.")
+    if isinstance(error, commands.RoleNotFound):
+        return await ctx.send("❌ ڕۆڵ نەدۆزرایەوە.")
+    if isinstance(error, commands.CommandOnCooldown):
+        return await ctx.send(f"⏳ تکایە **{error.retry_after:.1f}** چرکە چاوەڕێ بکە.")
+    if isinstance(error, commands.BadArgument):
+        return await ctx.send("❌ زانیارییەکە هەڵەیە.")
 
-    # Missing permissions
-    if isinstance(
-        error,
-        commands.MissingPermissions
-    ):
+    logger.error("Command error", exc_info=error)
+    try:
+        await ctx.send("❌ هەڵەیەکی نەخوازراو ڕوویدا.")
+    except discord.HTTPException:
+        pass
 
-        await ctx.send(
-            "❌ تۆ ڕێگەپێدانی ئەم کارەت نییە."
-        )
-
-    # Bot permissions
-    elif isinstance(
-        error,
-        commands.BotMissingPermissions
-    ):
-
-        await ctx.send(
-            "❌ بۆت ڕێگەپێدانی ئەم کارەی نییە."
-        )
-
-    # Missing argument
-    elif isinstance(
-        error,
-        commands.MissingRequiredArgument
-    ):
-
-        await ctx.send(
-            f"❌ ئەرگومێنتێک کەمە.\n"
-            f"بەکاربێنە: `{PREFIX}help`"
-        )
-
-    # Member not found
-    elif isinstance(
-        error,
-        commands.MemberNotFound
-    ):
-
-        await ctx.send(
-            "❌ ئەندام نەدۆزرایەوە."
-        )
-
-    # Command not found
-    elif isinstance(
-        error,
-        commands.CommandNotFound
-    ):
-
-        return
-
-    # Cooldown
-    elif isinstance(
-        error,
-        commands.CommandOnCooldown
-    ):
-
-        await ctx.send(
-            f"⏳ تکایە **{error.retry_after:.1f}** "
-            f"چرکە چاوەڕێ بکە."
-        )
-
-    # Bad argument
-    elif isinstance(
-        error,
-        commands.BadArgument
-    ):
-
-        await ctx.send(
-            "❌ زانیارییەکە هەڵەیە."
-        )
-
-    # Check failure
-    elif isinstance(
-        error,
-        commands.CheckFailure
-    ):
-
-        await ctx.send(
-            "❌ تۆ ڕێگەپێدانی ئەم فرمانەت نییە."
-        )
-
-    # Other errors
-    else:
-
-        logger.error(
-            "Command error",
-            exc_info=error
-        )
-
-        try:
-
-            await ctx.send(
-                f"❌ هەڵەیەک ڕوویدا:\n"
-                f"`{error}`"
-            )
-
-        except discord.HTTPException:
-
-            pass
-
-
-# =========================================================
-# Load Cogs
-# =========================================================
 
 async def load_cogs():
-
-    cogs_list = [
-
-        # Moderation
-        "admin",
-        "moderation",
-
-        # Protection
-        "antispam",
-
-        # Fun
-        "fun",
-
-        # Utility
-        "utility",
-
-        # Information
-        "info",
-
-        # Economy
-        "economy",
-
-        # Games
-        "games",
-
-        # Images
-        "images",
-
-        # Music
-        "music",
-
-        # GitHub
-        "github"
+    cogs = [
+        "admin", "moderation", "antispam", "fun", "utility",
+        "info", "economy", "games", "images", "music", "github",
     ]
-
-    print("")
-    print("🔄 دەست بە Load کردنی Cogs دەکات...")
-    print("")
-
     loaded = 0
-    failed = 0
-
-    for cog in cogs_list:
-
+    for cog in cogs:
         try:
-
-            await bot.load_extension(
-                f"cogs.{cog}"
-            )
-
+            await bot.load_extension(f"cogs.{cog}")
             loaded += 1
+            logger.info("✅ %s بارکرا", cog)
+        except Exception:
+            logger.exception("❌ %s بارنەکرا", cog)
 
-            print(
-                f"✅ {cog} بارکرا"
-            )
+    logger.info("🧩 کۆی Cogs ـی بارکراو: %s/%s", loaded, len(cogs))
 
-        except Exception as e:
-
-            failed += 1
-
-            print(
-                f"❌ {cog} بارنەکرا: {e}"
-            )
-
-            logger.exception(
-                f"Failed to load cog: {cog}"
-            )
-
-    print("")
-    print("========================================")
-    print(
-        f"✅ Loaded: {loaded}"
-    )
-    print(
-        f"❌ Failed: {failed}"
-    )
-    print(
-        f"🧩 Total active Cogs: {len(bot.cogs)}"
-    )
-    print("========================================")
-    print("")
-
-
-# =========================================================
-# Main
-# =========================================================
 
 async def main():
-
+    bot.start_time = datetime.now(timezone.utc)
     async with bot:
-
-        # Load all Cogs
         await load_cogs()
+        await bot.start(DISCORD_TOKEN)
 
-        # Start Discord Bot
-        await bot.start(
-            DISCORD_TOKEN
-        )
-
-
-# =========================================================
-# Start Bot
-# =========================================================
 
 if __name__ == "__main__":
-
     try:
-
-        asyncio.run(
-            main()
-        )
-
+        asyncio.run(main())
     except KeyboardInterrupt:
-
-        print("")
-        print("🛑 Bot بە دەستی بەکارهێنەر وەستا.")
-
-    except Exception as e:
-
-        print("")
-        print(
-            f"❌ Bot بە هەڵە وەستا: {e}"
-        )
-
-        logger.exception(
-            "Fatal bot error"
-        )
+        print("🛑 Bot وەستا.")
