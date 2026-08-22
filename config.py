@@ -1,7 +1,7 @@
 import os
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_TOKEN = os.getenv("HONAR_GITHUB_TOKEN")
 PREFIX = "!"
 
 if not DISCORD_TOKEN:
