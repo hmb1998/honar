@@ -7,6 +7,7 @@ from discord.ext import commands
 
 from config import DISCORD_TOKEN, PREFIX
 
+
 # ============================================================
 # LOGGING
 # ============================================================
@@ -15,6 +16,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
+
 logger = logging.getLogger("honar")
 
 
@@ -59,10 +61,12 @@ bot = commands.Bot(
 # HMB NEXUS APPLICATION EMOJIS
 # ============================================================
 #
-# These are Application Emojis from the Discord Developer Portal.
-# They are fetched from Discord when the bot starts.
+# Application Emojis from:
+# Discord Developer Portal
 #
-# Use from any cog:
+# Total: 10
+#
+# Usage from any cog:
 #
 #     self.bot.hmb_emoji(1)
 #     self.bot.hmb_emoji(2)
@@ -71,7 +75,7 @@ bot = commands.Bot(
 #
 # Or:
 #
-#     emoji = self.bot.get_hmb_emoji(1)
+#     self.bot.get_hmb_emoji(1)
 #
 # ============================================================
 
@@ -85,25 +89,47 @@ HMB_APPLICATION_EMOJI_IDS = {
     7: 1540661704818696262,
     8: 1540660973906698251,
     9: 1540660698873471057,
-    10: 1540665960465948496,
+
+    # FIXED EMOJI #10
+    10: 1540659590645948496,
 }
+
+
+# ============================================================
+# EMOJI STORAGE
+# ============================================================
 
 HMB_EMOJIS: dict[int, discord.Emoji] = {}
 
 
+# ============================================================
+# LOAD APPLICATION EMOJIS
+# ============================================================
+
 async def load_application_emojis():
-    """Fetch the 10 HMB NEXUS Application Emojis from Discord."""
+    """
+    Fetch all HMB NEXUS Application Emojis from Discord.
+    """
 
     HMB_EMOJIS.clear()
 
-    logger.info("Loading HMB NEXUS Application Emojis...")
+    logger.info(
+        "Loading HMB NEXUS Application Emojis..."
+    )
+
+    total = len(HMB_APPLICATION_EMOJI_IDS)
 
     for number, emoji_id in HMB_APPLICATION_EMOJI_IDS.items():
-        try:
-            emoji = await bot.fetch_application_emoji(emoji_id)
 
-            if emoji:
+        try:
+            emoji = await bot.fetch_application_emoji(
+                emoji_id
+            )
+
+            if emoji is not None:
+
                 HMB_EMOJIS[number] = emoji
+
                 logger.info(
                     "Loaded HMB Emoji %s: %s (%s)",
                     number,
@@ -112,6 +138,7 @@ async def load_application_emojis():
                 )
 
         except discord.NotFound:
+
             logger.error(
                 "HMB Emoji %s was not found. ID=%s",
                 number,
@@ -119,6 +146,7 @@ async def load_application_emojis():
             )
 
         except discord.Forbidden:
+
             logger.error(
                 "Discord denied access to HMB Emoji %s. ID=%s",
                 number,
@@ -126,6 +154,7 @@ async def load_application_emojis():
             )
 
         except discord.HTTPException as error:
+
             logger.error(
                 "Discord API error loading HMB Emoji %s: %s",
                 number,
@@ -133,6 +162,7 @@ async def load_application_emojis():
             )
 
         except Exception:
+
             logger.exception(
                 "Unexpected error loading HMB Emoji %s",
                 number,
@@ -141,19 +171,29 @@ async def load_application_emojis():
     logger.info(
         "HMB NEXUS Emojis loaded: %s/%s",
         len(HMB_EMOJIS),
-        len(HMB_APPLICATION_EMOJI_IDS),
+        total,
     )
 
 
-def hmb_emoji(number: int, fallback: str = "❔") -> str:
+# ============================================================
+# HMB EMOJI HELPER
+# ============================================================
+
+def hmb_emoji(
+    number: int,
+    fallback: str = "❔",
+) -> str:
     """
     Return an HMB Application Emoji as a string.
 
-    Example:
+    Examples:
+
         hmb_emoji(1)
+        hmb_emoji(5)
         hmb_emoji(10)
 
-    If an emoji cannot be loaded, the fallback is returned.
+    If the emoji is unavailable,
+    the fallback emoji will be returned.
     """
 
     emoji = HMB_EMOJIS.get(number)
@@ -164,13 +204,24 @@ def hmb_emoji(number: int, fallback: str = "❔") -> str:
     return str(emoji)
 
 
-def get_hmb_emoji(number: int) -> discord.Emoji | None:
-    """Return the actual discord.Emoji object."""
+# ============================================================
+# GET HMB EMOJI OBJECT
+# ============================================================
+
+def get_hmb_emoji(
+    number: int,
+) -> discord.Emoji | None:
+    """
+    Return the actual Discord Emoji object.
+    """
 
     return HMB_EMOJIS.get(number)
 
 
-# Make the helpers available to every cog through the bot instance.
+# ============================================================
+# MAKE EMOJIS AVAILABLE TO ALL COGS
+# ============================================================
+
 bot.hmb_emojis = HMB_EMOJIS
 bot.hmb_emoji = hmb_emoji
 bot.get_hmb_emoji = get_hmb_emoji
@@ -181,25 +232,38 @@ bot.get_hmb_emoji = get_hmb_emoji
 # ============================================================
 
 async def load_cogs():
-    """Load every cog before syncing slash commands."""
+    """
+    Load every cog before syncing slash commands.
+    """
 
     loaded = 0
 
     for cog in COGS:
+
         extension = f"cogs.{cog}"
 
         try:
-            await bot.load_extension(extension)
+
+            await bot.load_extension(
+                extension
+            )
+
             loaded += 1
-            logger.info("Loaded: %s", extension)
+
+            logger.info(
+                "Loaded: %s",
+                extension,
+            )
 
         except commands.NoEntryPointError:
+
             logger.warning(
                 "Skipped %s: no setup() entry point.",
                 extension,
             )
 
         except Exception:
+
             logger.exception(
                 "Failed to load %s",
                 extension,
@@ -217,9 +281,12 @@ async def load_cogs():
 # ============================================================
 
 async def sync_slash_commands():
-    """Sync all hybrid/slash commands globally."""
+    """
+    Sync all hybrid/slash commands globally.
+    """
 
     try:
+
         synced = await bot.tree.sync()
 
         logger.info(
@@ -228,6 +295,7 @@ async def sync_slash_commands():
         )
 
     except Exception:
+
         logger.exception(
             "Failed to sync slash commands.",
         )
@@ -238,11 +306,22 @@ async def sync_slash_commands():
 # ============================================================
 
 async def setup_hook():
-    # Application Emojis must be loaded before the cogs
-    # so every cog can use bot.hmb_emoji().
+
+    # --------------------------------------------------------
+    # 1. Load Application Emojis
+    # --------------------------------------------------------
+
     await load_application_emojis()
 
+    # --------------------------------------------------------
+    # 2. Load Cogs
+    # --------------------------------------------------------
+
     await load_cogs()
+
+    # --------------------------------------------------------
+    # 3. Sync Slash Commands
+    # --------------------------------------------------------
 
     await sync_slash_commands()
 
@@ -256,6 +335,7 @@ bot.setup_hook = setup_hook
 
 @bot.event
 async def on_ready():
+
     logger.info(
         "Logged in as %s (%s)",
         bot.user,
@@ -271,9 +351,15 @@ async def on_ready():
 
     await bot.change_presence(
         status=discord.Status.online,
+
         activity=discord.Activity(
             type=discord.ActivityType.listening,
-            name=f"{PREFIX}help | /help | HMB NEXUS",
+
+            name=(
+                f"{PREFIX}help | "
+                f"/help | "
+                f"HMB NEXUS"
+            ),
         ),
     )
 
@@ -284,7 +370,10 @@ async def on_ready():
 
 @bot.event
 async def on_resumed():
-    logger.info("Discord connection resumed.")
+
+    logger.info(
+        "Discord connection resumed."
+    )
 
 
 # ============================================================
@@ -296,51 +385,97 @@ async def on_command_error(
     ctx: commands.Context,
     error: commands.CommandError,
 ):
-    if isinstance(error, commands.CommandNotFound):
+
+    if isinstance(
+        error,
+        commands.CommandNotFound,
+    ):
         return
 
     messages = {
+
         commands.MissingPermissions:
             "❌ تۆ ڕێگەپێدانی ئەم کارەت نییە.",
+
         commands.BotMissingPermissions:
             "❌ بۆت ڕێگەپێدانی ئەم کارەی نییە.",
+
         commands.MemberNotFound:
             "❌ ئەندام نەدۆزرایەوە.",
+
         commands.ChannelNotFound:
             "❌ چانێل نەدۆزرایەوە.",
+
         commands.RoleNotFound:
             "❌ ڕۆڵ نەدۆزرایەوە.",
+
         commands.BadArgument:
             "❌ زانیارییەکە هەڵەیە.",
     }
 
     for error_type, message in messages.items():
-        if isinstance(error, error_type):
+
+        if isinstance(
+            error,
+            error_type,
+        ):
+
             try:
-                await ctx.send(message)
+
+                await ctx.send(
+                    message
+                )
+
             except discord.HTTPException:
                 pass
+
             return
 
-    if isinstance(error, commands.MissingRequiredArgument):
+    # --------------------------------------------------------
+    # Missing Required Argument
+    # --------------------------------------------------------
+
+    if isinstance(
+        error,
+        commands.MissingRequiredArgument,
+    ):
+
         try:
+
             await ctx.send(
                 f"❌ ئەرگومێنتێک کەمە. "
                 f"`{PREFIX}help` یان `/help` بەکاربهێنە."
             )
+
         except discord.HTTPException:
             pass
+
         return
 
-    if isinstance(error, commands.CommandOnCooldown):
+    # --------------------------------------------------------
+    # Cooldown
+    # --------------------------------------------------------
+
+    if isinstance(
+        error,
+        commands.CommandOnCooldown,
+    ):
+
         try:
+
             await ctx.send(
                 f"⏳ تکایە **{error.retry_after:.1f}** "
                 f"چرکە چاوەڕێ بکە."
             )
+
         except discord.HTTPException:
             pass
+
         return
+
+    # --------------------------------------------------------
+    # Unknown Error
+    # --------------------------------------------------------
 
     logger.exception(
         "Unhandled prefix command error",
@@ -348,7 +483,11 @@ async def on_command_error(
     )
 
     try:
-        await ctx.send("❌ هەڵەیەکی نەخوازراو ڕوویدا.")
+
+        await ctx.send(
+            "❌ هەڵەیەکی نەخوازراو ڕوویدا."
+        )
+
     except discord.HTTPException:
         pass
 
@@ -362,40 +501,59 @@ async def on_app_command_error(
     interaction: discord.Interaction,
     error: discord.app_commands.AppCommandError,
 ):
-    """Friendly error handler for slash commands."""
+    """
+    Friendly error handler for slash commands.
+    """
 
     if isinstance(
         error,
         discord.app_commands.MissingPermissions,
     ):
-        message = "❌ تۆ ڕێگەپێدانی ئەم کارەت نییە."
+
+        message = (
+            "❌ تۆ ڕێگەپێدانی ئەم کارەت نییە."
+        )
 
     elif isinstance(
         error,
         discord.app_commands.BotMissingPermissions,
     ):
-        message = "❌ بۆت ڕێگەپێدانی ئەم کارەی نییە."
+
+        message = (
+            "❌ بۆت ڕێگەپێدانی ئەم کارەی نییە."
+        )
 
     elif isinstance(
         error,
         discord.app_commands.TransformerError,
     ):
-        message = "❌ زانیارییەکە هەڵەیە."
+
+        message = (
+            "❌ زانیارییەکە هەڵەیە."
+        )
 
     else:
+
         logger.exception(
             "Unhandled slash command error",
             exc_info=error,
         )
-        message = "❌ هەڵەیەکی نەخوازراو ڕوویدا."
+
+        message = (
+            "❌ هەڵەیەکی نەخوازراو ڕوویدا."
+        )
 
     try:
+
         if interaction.response.is_done():
+
             await interaction.followup.send(
                 message,
                 ephemeral=True,
             )
+
         else:
+
             await interaction.response.send_message(
                 message,
                 ephemeral=True,
@@ -410,14 +568,32 @@ async def on_app_command_error(
 # ============================================================
 
 async def main():
-    bot.start_time = datetime.now(timezone.utc)
+
+    bot.start_time = datetime.now(
+        timezone.utc
+    )
 
     async with bot:
-        await bot.start(DISCORD_TOKEN)
 
+        await bot.start(
+            DISCORD_TOKEN
+        )
+
+
+# ============================================================
+# START BOT
+# ============================================================
 
 if __name__ == "__main__":
+
     try:
-        asyncio.run(main())
+
+        asyncio.run(
+            main()
+        )
+
     except KeyboardInterrupt:
-        logger.info("Bot stopped.")
+
+        logger.info(
+            "Bot stopped."
+        )
