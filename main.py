@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import discord
 from discord.ext import commands
 
-from config import DISCORD_TOKEN, PREFIX
+from config import DISCORD_TOKEN, PREFIX, HMB_APPLICATION_ID, HMB_PRESENCE_NAME, HMB_PRESENCE_STATE
 
 
 # ============================================================
@@ -330,6 +330,54 @@ bot.setup_hook = setup_hook
 
 
 # ============================================================
+# HMB NEXUS BOT PRESENCE
+# ============================================================
+#
+# IMPORTANT:
+# Discord currently restricts BOT users to sending only:
+#   - name
+#   - state
+#   - type
+#   - url
+#
+# Therefore the Rich Presence Art Assets uploaded in:
+#   Developer Portal -> Activities -> Art Assets
+# cannot be attached to a BOT presence through the normal
+# Discord Gateway. The uploaded Cover Image / Assets remain
+# configured in the Developer Portal and can be used by
+# supported Activity/SDK integrations.
+#
+# This function uses the fields that Discord allows for bots.
+# ============================================================
+
+async def update_hmb_presence():
+    """Set the HMB NEXUS presence using fields allowed for bot users."""
+
+    try:
+        activity = discord.Activity(
+            type=discord.ActivityType.playing,
+            name=HMB_PRESENCE_NAME,
+            state=HMB_PRESENCE_STATE,
+        )
+
+        await bot.change_presence(
+            status=discord.Status.online,
+            activity=activity,
+        )
+
+        logger.info(
+            "HMB NEXUS presence enabled: Playing %s | %s",
+            HMB_PRESENCE_NAME,
+            HMB_PRESENCE_STATE,
+        )
+
+    except discord.HTTPException:
+        logger.exception("Failed to update HMB NEXUS presence.")
+    except Exception:
+        logger.exception("Unexpected error updating HMB NEXUS presence.")
+
+
+# ============================================================
 # READY
 # ============================================================
 
@@ -349,19 +397,7 @@ async def on_ready():
         len(HMB_EMOJIS),
     )
 
-    await bot.change_presence(
-        status=discord.Status.online,
-
-        activity=discord.Activity(
-            type=discord.ActivityType.listening,
-
-            name=(
-                f"{PREFIX}help | "
-                f"/help | "
-                f"HMB NEXUS"
-            ),
-        ),
-    )
+    await update_hmb_presence()
 
 
 # ============================================================

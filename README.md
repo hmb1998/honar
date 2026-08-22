@@ -65,3 +65,31 @@ For faster Slash Command updates while testing on one server, set this Railway v
 ```
 
 Slash commands are synced globally and work in every server where the bot is installed with the required application command scope.
+
+
+## HMB NEXUS Presence
+
+The project now sets the bot presence automatically when the bot becomes ready.
+
+Optional Railway variables:
+
+```text
+DISCORD_APPLICATION_ID=1540575563607969832
+HMB_PRESENCE_NAME=HMB • NEXUS
+HMB_PRESENCE_STATE=Music • Moderation • Games • Economy
+```
+
+### About Rich Presence Art Assets
+
+The Discord Developer Portal **Activities -> Art Assets** section is useful for
+supported Activity / Rich Presence integrations. However, Discord's current
+Gateway documentation states that **bot users can only set `name`, `state`,
+`type`, and `url`** in their activity payload. Bot users cannot attach
+`assets`, `details`, party information, or Rich Presence artwork to a normal
+bot presence.
+
+So the uploaded HMB NEXUS Cover Image and Activity Asset remain configured in
+the Developer Portal, while this bot uses the supported `Playing HMB • NEXUS`
+presence. Do not add a fake `assets=` argument expecting it to display on the
+bot; Discord will not expose that artwork through the normal bot Gateway
+presence.
