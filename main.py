@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone
 
 import discord
+import aiohttp
 from discord.ext import commands
 
 from config import (
@@ -333,7 +334,26 @@ async def sync_hmb_server_emojis(
             continue
 
         try:
-            image_bytes = await app_emoji.url.read()
+            # In discord.py 2.7.x, ApplicationEmoji.url is a plain URL string,
+            # not an Asset object. Download the image explicitly before creating
+            # the server custom emoji.
+            image_url = str(app_emoji.url)
+
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(
+                    image_url,
+                    headers={"User-Agent": "HMB-NEXUS/1.0"},
+                ) as response:
+                    if response.status != 200:
+                        body = await response.text()
+                        raise RuntimeError(
+                            f"Emoji image download failed: HTTP {response.status} {body[:200]}"
+                        )
+                    image_bytes = await response.read()
+
+            if not image_bytes:
+                raise RuntimeError("Emoji image download returned empty data")
 
             await guild.create_custom_emoji(
                 name=name,
