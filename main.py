@@ -43,6 +43,7 @@ COGS = (
     "images",
     "music",
     "github",
+    "hmb",
 )
 
 

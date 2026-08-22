@@ -1,95 +1,53 @@
-# HONAR Discord Bot
+# HMB NEXUS — Railway Bot
 
-A Python Discord bot with moderation, utility, economy, games, GitHub and YouTube music support.
+## What is active on Railway
 
-## Railway deployment
+- Discord Gateway bot: **YES**
+- 10 Discord Application Emojis: **YES**
+- Slash commands: **YES**
+- Bot Gateway presence: **YES**
+- Rich Presence portal assets: **uploaded/configured**, but they are not attached to a bot Gateway presence.
 
-1. Connect this repository to Railway.
-2. Add the environment variable:
-   - `DISCORD_TOKEN` = your Discord bot token
-   - `BOT_PREFIX` = optional, default `!`
-   - `GITHUB_TOKEN` or `HONAR_GITHUB_TOKEN` = optional
-3. Railway detects the included `Dockerfile`.
-4. Redeploy.
+## Railway Variables
 
-The Docker image uses Python 3.12 and installs FFmpeg, avoiding the Python 3.13 `audioop` compatibility problem and providing the executable required by the music cog.
-
-## Discord intents
-
-Enable these privileged intents in the Discord Developer Portal:
-
-- Presence Intent
-- Server Members Intent
-- Message Content Intent
-
-## Music
-
-The music cog uses `yt-dlp` and FFmpeg. Supported commands include:
-
-- `!play <YouTube URL or search>`
-- `!skip`
-- `!pause`
-- `!resume`
-- `!stop`
-- `!queue`
-- `!nowplaying`
-- `!volume 0-100`
-- `!remove <number>`
-- `!clearqueue`
-
-Never commit bot tokens or other secrets.
-
-
-## Commands: Prefix + Slash
-
-All bot commands are now **Hybrid Commands**, so they work with both the configured prefix and Discord Slash Commands.
-
-Examples:
+You do **not** need a `.env` file on Railway. Add these variables in Railway → Variables:
 
 ```text
-!help
-/help
-
-!play song
-/play song
-
-!github honar98
-/github username:honar98
-```
-
-The prefix remains controlled by `BOT_PREFIX` (default: `!`).
-
-For faster Slash Command updates while testing on one server, set this Railway variable:
-
-```text
-```
-
-Slash commands are synced globally and work in every server where the bot is installed with the required application command scope.
-
-
-## HMB NEXUS Presence
-
-The project now sets the bot presence automatically when the bot becomes ready.
-
-Optional Railway variables:
-
-```text
+DISCORD_TOKEN=your_bot_token
+GITHUB_TOKEN=your_github_token_optional
 DISCORD_APPLICATION_ID=1540575563607969832
 HMB_PRESENCE_NAME=HMB • NEXUS
 HMB_PRESENCE_STATE=Music • Moderation • Games • Economy
 ```
 
-### About Rich Presence Art Assets
+`DISCORD_TOKEN` is required. Never put the bot token directly into source code.
 
-The Discord Developer Portal **Activities -> Art Assets** section is useful for
-supported Activity / Rich Presence integrations. However, Discord's current
-Gateway documentation states that **bot users can only set `name`, `state`,
-`type`, and `url`** in their activity payload. Bot users cannot attach
-`assets`, `details`, party information, or Rich Presence artwork to a normal
-bot presence.
+## Verify the 10 application emojis
 
-So the uploaded HMB NEXUS Cover Image and Activity Asset remain configured in
-the Developer Portal, while this bot uses the supported `Playing HMB • NEXUS`
-presence. Do not add a fake `assets=` argument expecting it to display on the
-bot; Discord will not expose that artwork through the normal bot Gateway
-presence.
+After deployment, use:
+
+```text
+/hmb_emojis
+```
+
+The command displays all 10 application emojis and the footer reports `10/10` when all are available.
+
+Use:
+
+```text
+/hmb_status
+```
+
+to verify the bot, emojis, slash commands and Gateway presence.
+
+## Important: Rich Presence vs Bot Presence
+
+Discord's documented Rich Presence RPC updates the **Discord user** running the local Discord Desktop client. It is not a mechanism for attaching Rich Presence art assets to a bot user's Gateway presence.
+
+Therefore:
+
+- Railway can keep the HMB bot online and set its normal Gateway presence.
+- Your uploaded Rich Presence assets can be used by a supported Activity/SDK/RPC integration.
+- A local Rich Presence companion must run on the same computer as Discord Desktop if you want the user's profile to show the large/small Rich Presence artwork through local RPC.
+
+See `rich_presence/README.md` for the local companion.
