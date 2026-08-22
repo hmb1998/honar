@@ -1,97 +1,41 @@
 # HMB NEXUS — Railway Bot
 
-## What is active on Railway
+## Music fix — NO COOKIE
 
-- Discord Gateway bot: **YES**
-- 10 Discord Application Emojis: **YES**
-- Slash commands: **YES**
-- Bot Gateway presence: **YES**
-- Rich Presence portal assets: **uploaded/configured**, but they are not attached to a bot Gateway presence.
+This version is prepared for Railway and does **not** require a `YOUTUBE_COOKIE` variable.
 
-## Railway Variables
+### What was fixed
 
-You do **not** need a `.env` file on Railway. Add these variables in Railway → Variables:
+- `/play` now defers Discord interactions immediately, preventing `404 Unknown interaction (10062)` while YouTube is resolving.
+- yt-dlp uses the current EJS JavaScript challenge support with Deno.
+- BgUtils PO-token provider runs locally inside the same Railway container and can help with YouTube's `Sign in to confirm you're not a bot` check.
+- Multiple YouTube player clients are tried automatically.
+- If yt-dlp cannot resolve a track, the bot tries a current public Invidious API fallback.
+- The Music Control Panel Search button uses the same resolver.
+- Queue / Skip / Stop / Pause / Resume / Volume / Shuffle continue to use the existing music system.
+
+### Railway
+
+Use the included `Dockerfile` and redeploy the service.
+
+Required Railway variable:
 
 ```text
 DISCORD_TOKEN=your_bot_token
-GITHUB_TOKEN=your_github_token_optional
-DISCORD_APPLICATION_ID=1540575563607969832
-HMB_PRESENCE_NAME=HMB • NEXUS
-HMB_PRESENCE_STATE=Music • Moderation • Games • Economy
 ```
 
-`DISCORD_TOKEN` is required. Never put the bot token directly into source code.
+Optional variables already supported by the bot remain unchanged.
 
-## Verify the 10 application emojis
+**Do not add `YOUTUBE_COOKIE`. It is not required by this version.**
 
-After deployment, use:
+### After deploy
 
-```text
-/hmb_emojis
-```
+1. Open Railway → Deployments.
+2. Wait for the new Docker build to finish.
+3. Open Deploy Logs and confirm the bot is online.
+4. Run `/play` with a song name.
+5. You can also open the HMB NEXUS music panel and press **Search**.
 
-The command displays all 10 application emojis and the footer reports `10/10` when all are available.
+### Important
 
-Use:
-
-```text
-/hmb_status
-```
-
-to verify the bot, emojis, slash commands and Gateway presence.
-
-## Important: Rich Presence vs Bot Presence
-
-Discord's documented Rich Presence RPC updates the **Discord user** running the local Discord Desktop client. It is not a mechanism for attaching Rich Presence art assets to a bot user's Gateway presence.
-
-Therefore:
-
-- Railway can keep the HMB bot online and set its normal Gateway presence.
-- Your uploaded Rich Presence assets can be used by a supported Activity/SDK/RPC integration.
-- A local Rich Presence companion must run on the same computer as Discord Desktop if you want the user's profile to show the large/small Rich Presence artwork through local RPC.
-
-See `rich_presence/README.md` for the local companion.
-
-
-## Make the 10 HMB emojis appear in the Discord Emoji Picker
-
-Application Emojis are different from normal Server Custom Emojis. The
-bot now includes a safe sync system that copies the 10 Application Emojis
-into the target server.
-
-Recommended Railway variable:
-
-```text
-HMB_EMOJI_GUILD_ID=YOUR_DISCORD_SERVER_ID
-```
-
-If the bot is in exactly one server, this variable can be left empty and
-that server is selected automatically.
-
-The bot needs **Manage Expressions** (Manage Emojis and Stickers).
-
-You can also run:
-
-```text
-/hmb_sync_emojis
-```
-
-The command is restricted to users with **Manage Expressions**.
-
-The server emoji names are:
-
-```text
-hmb_01
-hmb_02
-hmb_03
-hmb_04
-hmb_05
-hmb_06
-hmb_07
-hmb_08
-hmb_09
-hmb_10
-```
-
-The startup sync does not create duplicates: if an emoji with the same
-name already exists, it is left alone.
+YouTube changes its anti-bot and playback requirements frequently. The code has multiple fallbacks, but no third-party YouTube extractor can guarantee permanent playback for every video and every Railway IP.
