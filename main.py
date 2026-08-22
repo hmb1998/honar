@@ -92,6 +92,8 @@ async def main():
     bot.start_time = datetime.now(timezone.utc)
     async with bot:
         await load_cogs()
+        if not bot.cogs:
+            raise RuntimeError("هیچ Cog ـێک بار نەکرا. فایلەکان و dependencies پشکنە.")
         await bot.start(DISCORD_TOKEN)
 
 
