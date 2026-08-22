@@ -49,7 +49,6 @@ COGS = (
     "games",
     "images",
     "music",
-    "music_panel",
     "github",
     "hmb",
 )
