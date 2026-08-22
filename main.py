@@ -15,6 +15,8 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
+logger = logging.getLogger("honar")
+
 
 # =========================================================
 # Bot Settings
@@ -54,48 +56,80 @@ async def on_ready():
 
 
 # =========================================================
+# Disconnect / Resume
+# =========================================================
+
+@bot.event
+async def on_resumed():
+
+    logger.info("🔄 Discord connection resumed.")
+
+
+# =========================================================
 # Command Error Handler
 # =========================================================
 
 @bot.event
 async def on_command_error(ctx, error):
 
+    # Ignore errors already handled by commands
+    if hasattr(ctx.command, "on_error"):
+        return
+
     # Missing permissions
-    if isinstance(error, commands.MissingPermissions):
+    if isinstance(
+        error,
+        commands.MissingPermissions
+    ):
 
         await ctx.send(
-            "❌ تۆ ڕێگەپێدانی ئەم کارەت نییە"
+            "❌ تۆ ڕێگەپێدانی ئەم کارەت نییە."
+        )
+
+    # Bot permissions
+    elif isinstance(
+        error,
+        commands.BotMissingPermissions
+    ):
+
+        await ctx.send(
+            "❌ بۆت ڕێگەپێدانی ئەم کارەی نییە."
         )
 
     # Missing argument
-    elif isinstance(error, commands.MissingRequiredArgument):
+    elif isinstance(
+        error,
+        commands.MissingRequiredArgument
+    ):
 
         await ctx.send(
             f"❌ ئەرگومێنتێک کەمە.\n"
             f"بەکاربێنە: `{PREFIX}help`"
         )
 
-    # Bot permissions
-    elif isinstance(error, commands.BotMissingPermissions):
-
-        await ctx.send(
-            "❌ بۆت ڕێگەپێدانی ئەم کارەی نییە"
-        )
-
     # Member not found
-    elif isinstance(error, commands.MemberNotFound):
+    elif isinstance(
+        error,
+        commands.MemberNotFound
+    ):
 
         await ctx.send(
-            "❌ ئەندام نەدۆزرایەوە"
+            "❌ ئەندام نەدۆزرایەوە."
         )
 
     # Command not found
-    elif isinstance(error, commands.CommandNotFound):
+    elif isinstance(
+        error,
+        commands.CommandNotFound
+    ):
 
-        pass
+        return
 
     # Cooldown
-    elif isinstance(error, commands.CommandOnCooldown):
+    elif isinstance(
+        error,
+        commands.CommandOnCooldown
+    ):
 
         await ctx.send(
             f"⏳ تکایە **{error.retry_after:.1f}** "
@@ -103,26 +137,42 @@ async def on_command_error(ctx, error):
         )
 
     # Bad argument
-    elif isinstance(error, commands.BadArgument):
+    elif isinstance(
+        error,
+        commands.BadArgument
+    ):
 
         await ctx.send(
             "❌ زانیارییەکە هەڵەیە."
         )
 
+    # Check failure
+    elif isinstance(
+        error,
+        commands.CheckFailure
+    ):
+
+        await ctx.send(
+            "❌ تۆ ڕێگەپێدانی ئەم فرمانەت نییە."
+        )
+
     # Other errors
     else:
 
-        logging.error(
-            f"Command error: {error}"
+        logger.error(
+            "Command error",
+            exc_info=error
         )
 
         try:
 
             await ctx.send(
-                f"❌ هەڵە: `{error}`"
+                f"❌ هەڵەیەک ڕوویدا:\n"
+                f"`{error}`"
             )
 
         except discord.HTTPException:
+
             pass
 
 
@@ -170,6 +220,9 @@ async def load_cogs():
     print("🔄 دەست بە Load کردنی Cogs دەکات...")
     print("")
 
+    loaded = 0
+    failed = 0
+
     for cog in cogs_list:
 
         try:
@@ -178,25 +231,36 @@ async def load_cogs():
                 f"cogs.{cog}"
             )
 
+            loaded += 1
+
             print(
                 f"✅ {cog} بارکرا"
             )
 
         except Exception as e:
 
+            failed += 1
+
             print(
                 f"❌ {cog} بارنەکرا: {e}"
             )
 
-            logging.exception(
+            logger.exception(
                 f"Failed to load cog: {cog}"
             )
 
     print("")
+    print("========================================")
     print(
-        f"🧩 کۆی Cogs ـە Load کراوەکان: "
-        f"{len(bot.cogs)}"
+        f"✅ Loaded: {loaded}"
     )
+    print(
+        f"❌ Failed: {failed}"
+    )
+    print(
+        f"🧩 Total active Cogs: {len(bot.cogs)}"
+    )
+    print("========================================")
     print("")
 
 
@@ -218,16 +282,29 @@ async def main():
 
 
 # =========================================================
-# Start
+# Start Bot
 # =========================================================
 
 if __name__ == "__main__":
 
     try:
 
-        asyncio.run(main())
+        asyncio.run(
+            main()
+        )
 
     except KeyboardInterrupt:
 
         print("")
         print("🛑 Bot بە دەستی بەکارهێنەر وەستا.")
+
+    except Exception as e:
+
+        print("")
+        print(
+            f"❌ Bot بە هەڵە وەستا: {e}"
+        )
+
+        logger.exception(
+            "Fatal bot error"
+        )
