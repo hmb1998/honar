@@ -1,8 +1,11 @@
 import asyncio
 import logging
 import os
+import json
 import re
 from typing import Optional
+from urllib.parse import quote, urlparse, parse_qs
+from urllib.request import Request, urlopen
 
 import discord
 import yt_dlp
@@ -22,10 +25,14 @@ FFMPEG_OPTIONS = {
 # We try several public clients because YouTube changes which clients can
 # stream without an authenticated browser session.
 YOUTUBE_CLIENTS = [
-    "android_vr",
-    "tv",
-    "web_embedded",
+    # web_safari can expose HLS audio that currently avoids some GVS PO-token
+    # requirements. web_embedded/tv are useful anonymous fallbacks.
     "web_safari",
+    "web_embedded",
+    "tv",
+    "android_vr",
+    "web_music",
+    "mweb",
     "web",
 ]
 
@@ -37,8 +44,26 @@ BASE_YDL_OPTIONS = {
     "default_search": "ytsearch",
     "retries": 2,
     "fragment_retries": 2,
-    "socket_timeout": 15,
+    "socket_timeout": 20,
+    "http_headers": {
+        "User-Agent": (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+    },
+    # yt-dlp 2026 requires its EJS challenge solver for full YouTube support.
+    # The matching yt-dlp-ejs package is installed in the Docker image.
+    "js_runtimes": {"deno": {}},
 }
+
+INVIDIOUS_INSTANCES = [
+    "https://inv.nadeko.net",
+    "https://invidious.nerdvpn.de",
+    "https://yt.chocolatemoo53.com",
+    "https://invidious.tiekoetter.com",
+    "https://invidious.f5.si",
+]
 
 YOUTUBE_URL = re.compile(
     r"^(https?://)?(www\.)?(youtube\.com|youtu\.be)/",
@@ -66,7 +91,19 @@ class Music(commands.Cog):
                 "extractor_args": {
                     "youtube": {
                         "player_client": [client],
-                    }
+                        # Allow formats that are sometimes hidden when YouTube
+                        # marks a client as missing a PO token.
+                        "formats": ["missing_pot"],
+                    },
+                    # BgUtils provider is installed in the Docker image. If it
+                    # is unavailable, yt-dlp simply continues with its normal
+                    # anonymous clients.
+                    "youtubepot-bgutilhttp": {
+                        "base_url": os.getenv(
+                            "YOUTUBE_POT_PROVIDER_URL",
+                            "http://127.0.0.1:4416",
+                        ),
+                    },
                 },
             }
             try:
@@ -101,8 +138,114 @@ class Music(commands.Cog):
             raise last_error
         return None
 
+    @staticmethod
+    def _youtube_video_id(value: str) -> Optional[str]:
+        try:
+            parsed = urlparse(value)
+            host = parsed.netloc.lower().split(":")[0]
+            if host == "youtu.be":
+                return parsed.path.strip("/").split("/")[0] or None
+            if "youtube.com" in host:
+                return parse_qs(parsed.query).get("v", [None])[0]
+        except Exception:
+            return None
+        return None
+
+    @staticmethod
+    def _invidious_request(url: str) -> object:
+        req = Request(
+            url,
+            headers={
+                "User-Agent": "HMB-NEXUS/2.0",
+                "Accept": "application/json",
+            },
+        )
+        with urlopen(req, timeout=8) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    @classmethod
+    def _extract_invidious(cls, query: str) -> Optional[dict]:
+        video_id = cls._youtube_video_id(query)
+
+        for instance in INVIDIOUS_INSTANCES:
+            try:
+                if video_id:
+                    data = cls._invidious_request(
+                        f"{instance}/api/v1/videos/{video_id}?hl=en"
+                    )
+                else:
+                    search_query = query[8:] if query.lower().startswith("ytsearch:") else query
+                    results = cls._invidious_request(
+                        f"{instance}/api/v1/search?q={quote(search_query)}&type=video&hl=en"
+                    )
+                    if not isinstance(results, list) or not results:
+                        continue
+                    first = next(
+                        (item for item in results if item.get("type") == "video"),
+                        None,
+                    )
+                    if not first:
+                        continue
+                    video_id = first.get("videoId")
+                    if not video_id:
+                        continue
+                    data = cls._invidious_request(
+                        f"{instance}/api/v1/videos/{video_id}?hl=en"
+                    )
+
+                if not isinstance(data, dict):
+                    continue
+
+                formats = data.get("adaptiveFormats") or []
+                audio = [
+                    fmt for fmt in formats
+                    if fmt.get("url")
+                    and str(fmt.get("type", "")).startswith("audio/")
+                ]
+                audio.sort(
+                    key=lambda fmt: (
+                        int(fmt.get("bitrate") or 0),
+                        int(fmt.get("clen") or 0),
+                    ),
+                    reverse=True,
+                )
+                if not audio:
+                    continue
+
+                fmt = audio[0]
+                thumb = None
+                thumbs = data.get("videoThumbnails") or []
+                if thumbs:
+                    thumb = thumbs[-1].get("url")
+
+                return {
+                    "url": f"https://www.youtube.com/watch?v={video_id}",
+                    "stream_url": fmt["url"],
+                    "title": data.get("title", "نەناسراو"),
+                    "duration": int(data.get("lengthSeconds") or 0),
+                    "thumbnail": thumb,
+                }
+            except Exception as exc:
+                logger.warning("Invidious fallback %s failed: %s", instance, str(exc)[:180])
+
+        return None
+
+    @classmethod
+    def _extract_any(cls, query: str) -> Optional[dict]:
+        try:
+            return cls._extract(query)
+        except Exception as primary_error:
+            logger.warning(
+                "yt-dlp failed; trying Invidious fallback: %s",
+                str(primary_error)[:300],
+            )
+            fallback = cls._extract_invidious(query)
+            if fallback:
+                return fallback
+            raise primary_error
+
     async def _resolve(self, query: str) -> Optional[dict]:
-        return await asyncio.to_thread(self._extract, query)
+        return await asyncio.to_thread(self._extract_any, query)
 
     async def _send_play_error(self, ctx: commands.Context, exc: Exception):
         text = str(exc)
@@ -199,6 +342,12 @@ class Music(commands.Cog):
 
         if not ctx.author.voice:
             return await ctx.send("🔇 سەرەتا بچۆ ناو Voice Channel!")
+
+        # Slash commands expire while yt-dlp is contacting YouTube.
+        # Defer immediately so a slow extraction cannot cause:
+        # 404 Not Found (error code: 10062): Unknown interaction
+        if ctx.interaction is not None and not ctx.interaction.response.is_done():
+            await ctx.defer()
 
         voice = ctx.voice_client
         target_channel = ctx.author.voice.channel
