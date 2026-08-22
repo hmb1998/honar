@@ -21,7 +21,7 @@ class Info(commands.Cog):
                 color=0x3498db
             )
             embed.add_field(name="🔤 ناوەکانی تر", value=f"`{aliases}`", inline=False)
-            embed.add_field(name="📝 بەکارهێنان", value=f"`!{cmd.name}`", inline=False)
+            embed.add_field(name="📝 بەکارهێنان", value=f"`{self.bot.command_prefix}{cmd.name}`", inline=False)
             await ctx.send(embed=embed)
         else:
             embed = discord.Embed(
@@ -47,7 +47,12 @@ class Info(commands.Cog):
     @commands.command(name="botinfo", aliases=["bi", "about", "زانیاری_بۆت"])
     async def botinfo(self, ctx):
         """زانیاری دەربارەی بۆت"""
-        delta = datetime.datetime.now() - self.bot.start_time
+        start_time = getattr(self.bot, "start_time", None)
+        if start_time is None:
+            start_time = datetime.datetime.now(datetime.timezone.utc)
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=datetime.timezone.utc)
+        delta = datetime.datetime.now(datetime.timezone.utc) - start_time
         days = delta.days
         hours, remainder = divmod(delta.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -175,5 +180,4 @@ class Info(commands.Cog):
 
 
 async def setup(bot):
-    bot.start_time = datetime.datetime.now()
     await bot.add_cog(Info(bot))
