@@ -38,3 +38,30 @@ The music cog uses `yt-dlp` and FFmpeg. Supported commands include:
 - `!clearqueue`
 
 Never commit bot tokens or other secrets.
+
+
+## Commands: Prefix + Slash
+
+All bot commands are now **Hybrid Commands**, so they work with both the configured prefix and Discord Slash Commands.
+
+Examples:
+
+```text
+!help
+/help
+
+!play song
+/play song
+
+!github honar98
+/github username:honar98
+```
+
+The prefix remains controlled by `BOT_PREFIX` (default: `!`).
+
+For faster Slash Command updates while testing on one server, set this Railway variable:
+
+```text
+```
+
+Slash commands are synced globally and work in every server where the bot is installed with the required application command scope.
