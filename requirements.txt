@@ -1,7 +1,8 @@
-discord.py==2.3.2
+discord.py==2.7.1
 yt-dlp>=2024.12.0
 PyNaCl>=1.5.0
+audioop-lts==0.2.2; python_version>="3.13"
 aiohttp>=3.9.0
 Pillow>=10.0.0
 
-# Music commands also require the FFmpeg executable installed on the hosting OS.
+# FFmpeg is installed by Dockerfile for Railway music/voice support.
