@@ -22,10 +22,10 @@ class Admin(commands.Cog):
             return False, "❌ ڕۆڵی ئەندامەکە لە تۆ یان بەرزترە."
         return True, None
 
-    @commands.command(name="kick", aliases=["k", "دەرکردن"])
+    @commands.hybrid_command(name="kick", aliases=["k", "دەرکردن"])
     @commands.has_permissions(kick_members=True)
     @commands.bot_has_permissions(kick_members=True)
-    async def kick(self, ctx, member: discord.Member, *, reason="هۆکاری دیاری نەکراو"):
+    async def kick(self, ctx, member: discord.Member, *, reason: str ="هۆکاری دیاری نەکراو"):
         ok, error = self.can_moderate(ctx, member)
         if not ok:
             return await ctx.send(error)
@@ -35,10 +35,10 @@ class Admin(commands.Cog):
         except discord.HTTPException:
             await ctx.send("❌ Kick سەرکەوتوو نەبوو.")
 
-    @commands.command(name="ban", aliases=["b", "قەدەغە"])
+    @commands.hybrid_command(name="ban", aliases=["b", "قەدەغە"])
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
-    async def ban(self, ctx, member: discord.Member, *, reason="هۆکاری دیاری نەکراو"):
+    async def ban(self, ctx, member: discord.Member, *, reason: str ="هۆکاری دیاری نەکراو"):
         ok, error = self.can_moderate(ctx, member)
         if not ok:
             return await ctx.send(error)
@@ -48,7 +48,7 @@ class Admin(commands.Cog):
         except discord.HTTPException:
             await ctx.send("❌ Ban سەرکەوتوو نەبوو.")
 
-    @commands.command(name="unban", aliases=["ub", "لابردنی_قەدەغە"])
+    @commands.hybrid_command(name="unban", aliases=["ub", "لابردنی_قەدەغە"])
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
     async def unban(self, ctx, *, member: str):
@@ -63,10 +63,10 @@ class Admin(commands.Cog):
             return await ctx.send("❌ نەتوانرا لیستی Ban بخوێندرێتەوە.")
         await ctx.send("❌ ئەندام نەدۆزرایەوە لە لیستی قەدەغەکراوان.")
 
-    @commands.command(name="mute", aliases=["timeout", "بێدەنگ"])
+    @commands.hybrid_command(name="mute", aliases=["timeout", "بێدەنگ"])
     @commands.has_permissions(moderate_members=True)
     @commands.bot_has_permissions(moderate_members=True)
-    async def mute(self, ctx, member: discord.Member, minutes: int = 10, *, reason="هۆکاری دیاری نەکراو"):
+    async def mute(self, ctx, member: discord.Member, minutes: int = 10, *, reason: str ="هۆکاری دیاری نەکراو"):
         if minutes < 1 or minutes > 40320:
             return await ctx.send("❌ ماوە دەبێت لە 1 تا 40320 خولەک بێت.")
         ok, error = self.can_moderate(ctx, member)
@@ -78,7 +78,7 @@ class Admin(commands.Cog):
         except discord.HTTPException:
             await ctx.send("❌ Timeout سەرکەوتوو نەبوو.")
 
-    @commands.command(name="unmute", aliases=["untimeout", "لابردنی_بێدەنگی"])
+    @commands.hybrid_command(name="unmute", aliases=["untimeout", "لابردنی_بێدەنگی"])
     @commands.has_permissions(moderate_members=True)
     @commands.bot_has_permissions(moderate_members=True)
     async def unmute(self, ctx, member: discord.Member):
@@ -91,7 +91,7 @@ class Admin(commands.Cog):
         except discord.HTTPException:
             await ctx.send("❌ نەتوانرا timeout لاببرێت.")
 
-    @commands.command(name="clear", aliases=["purge", "delete", "سڕینەوە"])
+    @commands.hybrid_command(name="clear", aliases=["purge", "delete", "سڕینەوە"])
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(manage_messages=True, read_message_history=True)
     async def clear(self, ctx, amount: int):
@@ -103,7 +103,7 @@ class Admin(commands.Cog):
         except discord.HTTPException:
             await ctx.send("❌ نەتوانرا نامەکان بسڕدرێنەوە.")
 
-    @commands.command(name="slowmode", aliases=["slow", "هێواش"])
+    @commands.hybrid_command(name="slowmode", aliases=["slow", "هێواش"])
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
     async def slowmode(self, ctx, seconds: int = 5):
@@ -112,7 +112,7 @@ class Admin(commands.Cog):
         await ctx.channel.edit(slowmode_delay=seconds, reason=f"By {ctx.author}")
         await ctx.send(f"🐢 **Slowmode:** {seconds} چرکە")
 
-    @commands.command(name="lock", aliases=["lockdown", "داخستن"])
+    @commands.hybrid_command(name="lock", aliases=["lockdown", "داخستن"])
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_roles=True)
     async def lock(self, ctx):
@@ -121,7 +121,7 @@ class Admin(commands.Cog):
         await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=overwrite, reason=f"Lock by {ctx.author}")
         await ctx.send("🔒 **چانێل داخرا بۆ @everyone.**")
 
-    @commands.command(name="unlock", aliases=["کردنەوە"])
+    @commands.hybrid_command(name="unlock", aliases=["کردنەوە"])
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_roles=True)
     async def unlock(self, ctx):
@@ -130,7 +130,7 @@ class Admin(commands.Cog):
         await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=overwrite, reason=f"Unlock by {ctx.author}")
         await ctx.send("🔓 **چانێل کرایەوە.**")
 
-    @commands.command(name="nickname", aliases=["nick", "ناو"])
+    @commands.hybrid_command(name="nickname", aliases=["nick", "ناو"])
     @commands.has_permissions(manage_nicknames=True)
     @commands.bot_has_permissions(manage_nicknames=True)
     async def nickname(self, ctx, member: discord.Member, *, nick: str = None):

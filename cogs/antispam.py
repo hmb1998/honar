@@ -916,7 +916,7 @@ class AntiSpam(commands.Cog):
     # MANUAL RAID LOCK
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="raidlock"
     )
     @commands.has_permissions(
@@ -949,7 +949,7 @@ class AntiSpam(commands.Cog):
     # MANUAL RAID UNLOCK
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="raidunlock"
     )
     @commands.has_permissions(
@@ -980,7 +980,7 @@ class AntiSpam(commands.Cog):
     # RAID STATUS
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="raidstatus",
         aliases=[
             "raid",
@@ -1092,7 +1092,7 @@ class AntiSpam(commands.Cog):
     # ANTI-SPAM STATUS
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="antispam",
         aliases=[
             "spamsettings"

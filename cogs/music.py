@@ -134,7 +134,7 @@ class Music(commands.Cog):
             except discord.HTTPException:
                 pass
 
-    @commands.command(name="play", aliases=("p", "ژەنین"))
+    @commands.hybrid_command(name="play", aliases=("p", "ژەنین"))
     async def play(self, ctx: commands.Context, *, query: str):
         """ژەنینی گۆرانی لە YouTube بە لینک یان ناو."""
         if not ctx.guild:
@@ -170,7 +170,7 @@ class Music(commands.Cog):
         else:
             await self._play_song(ctx, song)
 
-    @commands.command(name="skip", aliases=("s", "next", "پەڕاندن"))
+    @commands.hybrid_command(name="skip", aliases=("s", "next", "پەڕاندن"))
     async def skip(self, ctx: commands.Context):
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.stop()
@@ -178,7 +178,7 @@ class Music(commands.Cog):
         else:
             await ctx.send("❌ هیچ گۆرانییەک ناژەنرێت.")
 
-    @commands.command(name="stop", aliases=("leave", "dc", "وەستان"))
+    @commands.hybrid_command(name="stop", aliases=("leave", "dc", "وەستان"))
     async def stop(self, ctx: commands.Context):
         guild_id = ctx.guild.id
         self.queues[guild_id] = []
@@ -190,7 +190,7 @@ class Music(commands.Cog):
         else:
             await ctx.send("❌ بۆت لە Voice نییە.")
 
-    @commands.command(name="queue", aliases=("q", "list", "ڕیز"))
+    @commands.hybrid_command(name="queue", aliases=("q", "list", "ڕیز"))
     async def queue(self, ctx: commands.Context):
         queue = self.get_queue(ctx.guild.id)
         current = self.now_playing.get(ctx.guild.id)
@@ -212,7 +212,7 @@ class Music(commands.Cog):
         lines.append(f"\n**کۆی ڕیز:** {len(queue)}")
         await ctx.send("\n".join(lines)[:2000])
 
-    @commands.command(name="pause", aliases=("pa", "ڕاگرتن"))
+    @commands.hybrid_command(name="pause", aliases=("pa", "ڕاگرتن"))
     async def pause(self, ctx: commands.Context):
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.pause()
@@ -220,7 +220,7 @@ class Music(commands.Cog):
         else:
             await ctx.send("❌ هیچ گۆرانییەک ناژەنرێت.")
 
-    @commands.command(name="resume", aliases=("res", "unpause", "بەردەوام"))
+    @commands.hybrid_command(name="resume", aliases=("res", "unpause", "بەردەوام"))
     async def resume(self, ctx: commands.Context):
         if ctx.voice_client and ctx.voice_client.is_paused():
             ctx.voice_client.resume()
@@ -228,7 +228,7 @@ class Music(commands.Cog):
         else:
             await ctx.send("❌ هیچ گۆرانییەک ڕانەگیراوە.")
 
-    @commands.command(name="volume", aliases=("vol", "v", "دەنگ"))
+    @commands.hybrid_command(name="volume", aliases=("vol", "v", "دەنگ"))
     async def volume(self, ctx: commands.Context, vol: int):
         if not 0 <= vol <= 100:
             return await ctx.send("❌ دەنگ دەبێت لە نێوان `0-100` بێت.")
@@ -245,7 +245,7 @@ class Music(commands.Cog):
         else:
             await ctx.send("❌ سەرچاوەی دەنگ بەردەست نییە.")
 
-    @commands.command(name="nowplaying", aliases=("np", "current", "ئێستا"))
+    @commands.hybrid_command(name="nowplaying", aliases=("np", "current", "ئێستا"))
     async def nowplaying(self, ctx: commands.Context):
         current = self.now_playing.get(ctx.guild.id)
 
@@ -268,7 +268,7 @@ class Music(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    @commands.command(name="remove", aliases=("rm", "del", "لابردن"))
+    @commands.hybrid_command(name="remove", aliases=("rm", "del", "لابردن"))
     async def remove(self, ctx: commands.Context, index: int):
         queue = self.get_queue(ctx.guild.id)
 
@@ -280,7 +280,7 @@ class Music(commands.Cog):
                 f"❌ ژمارە نادروستە. ڕیز `{len(queue)}` گۆرانی هەیە."
             )
 
-    @commands.command(name="clearqueue", aliases=("cq", "clearq", "بەتاڵ"))
+    @commands.hybrid_command(name="clearqueue", aliases=("cq", "clearq", "بەتاڵ"))
     async def clearqueue(self, ctx: commands.Context):
         self.queues[ctx.guild.id] = []
         await ctx.send("🗑 **ڕیز بەتاڵکرایەوە.**")

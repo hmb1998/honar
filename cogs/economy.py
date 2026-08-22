@@ -43,7 +43,7 @@ class Economy(commands.Cog):
             }
         return self.data[user_id]
 
-    @commands.command(name="balance", aliases=["bal", "money", "پارە"])
+    @commands.hybrid_command(name="balance", aliases=["bal", "money", "پارە"])
     async def balance(self, ctx, member: discord.Member = None):
         """پیشاندانی هاوسەنگی ئەندام"""
         if not member:
@@ -60,7 +60,7 @@ class Economy(commands.Cog):
         embed.add_field(name="✨ XP", value=f"{user['xp']}/{(user['level'] * 100)}", inline=True)
         await ctx.send(embed=embed)
 
-    @commands.command(name="daily", aliases=["دیاری_ڕۆژانە"])
+    @commands.hybrid_command(name="daily", aliases=["دیاری_ڕۆژانە"])
     async def daily(self, ctx):
         """وەرگرتنی دیاری ڕۆژانە"""
         user = self.get_user(ctx.author.id)
@@ -78,7 +78,7 @@ class Economy(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.command(name="work", aliases=["کار"])
+    @commands.hybrid_command(name="work", aliases=["کار"])
     async def work(self, ctx):
         """کارکردن و بەدەستهێنانی پارە"""
         jobs = [
@@ -105,7 +105,7 @@ class Economy(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.command(name="rob", aliases=["steal", "دزیکردن"])
+    @commands.hybrid_command(name="rob", aliases=["steal", "دزیکردن"])
     async def rob(self, ctx, member: discord.Member):
         """دزیکردن لە ئەندامێکی تر"""
         if member == ctx.author:
@@ -127,7 +127,7 @@ class Economy(commands.Cog):
             self.save_data()
             await ctx.send(f"🚔 **گیرایت!** -{fine} 💰 جریمە کرایت")
 
-    @commands.command(name="transfer", aliases=["give", "pay", "ناردن"])
+    @commands.hybrid_command(name="transfer", aliases=["give", "pay", "ناردن"])
     async def transfer(self, ctx, member: discord.Member, amount: int):
         """ناردنی پارە بۆ ئەندامێکی تر"""
         if member == ctx.author:
@@ -145,7 +145,7 @@ class Economy(commands.Cog):
         self.save_data()
         await ctx.send(f"💸 **{ctx.author.name}** {amount} 💰 نارد بۆ **{member.name}**")
 
-    @commands.command(name="shop", aliases=["store", "فرۆشگا"])
+    @commands.hybrid_command(name="shop", aliases=["store", "فرۆشگا"])
     async def shop(self, ctx):
         """فرۆشگا - کەرینی شتەکان"""
         items = {
@@ -160,7 +160,7 @@ class Economy(commands.Cog):
         embed.set_footer(text="!buy [ناوی شتەکە] بۆ کڕین")
         await ctx.send(embed=embed)
 
-    @commands.command(name="buy", aliases=["کڕین"])
+    @commands.hybrid_command(name="buy", aliases=["کڕین"])
     async def buy(self, ctx, *, item_name: str):
         """کڕینی شت لە فرۆشگا"""
         items = {
@@ -183,7 +183,7 @@ class Economy(commands.Cog):
         self.save_data()
         await ctx.send(f"✅ **{found[0]}** کریا! +1 بۆ کۆگات")
 
-    @commands.command(name="inventory", aliases=["inv", "کۆگا"])
+    @commands.hybrid_command(name="inventory", aliases=["inv", "کۆگا"])
     async def inventory(self, ctx):
         """پیشاندانی کۆگا"""
         user = self.get_user(ctx.author.id)
@@ -196,7 +196,7 @@ class Economy(commands.Cog):
             msg += f"- {item} x{c}\n"
         await ctx.send(msg[:2000])
 
-    @commands.command(name="leaderboard", aliases=["lb", "top", "ڕیزبەندی"])
+    @commands.hybrid_command(name="leaderboard", aliases=["lb", "top", "ڕیزبەندی"])
     async def leaderboard(self, ctx):
         """ڕیزبەندی دەوڵەمەندترین ئەندامان"""
         sorted_users = sorted(

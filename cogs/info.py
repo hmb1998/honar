@@ -7,7 +7,7 @@ class Info(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="help", aliases=["h", "commands", "یارمەتی"])
+    @commands.hybrid_command(name="help", aliases=["h", "commands", "یارمەتی"])
     async def help(self, ctx, *, command_name: str = None):
         """پیشاندانی هەموو کۆماندەکان یان یارمەتی کۆماندێکی دیاریکراو"""
         if command_name:
@@ -44,7 +44,7 @@ class Info(commands.Cog):
             embed.set_footer(text="!help [کۆماند] بۆ زانیاری وردتر")
             await ctx.send(embed=embed)
 
-    @commands.command(name="botinfo", aliases=["bi", "about", "زانیاری_بۆت"])
+    @commands.hybrid_command(name="botinfo", aliases=["bi", "about", "زانیاری_بۆت"])
     async def botinfo(self, ctx):
         """زانیاری دەربارەی بۆت"""
         start_time = getattr(self.bot, "start_time", None)
@@ -71,7 +71,7 @@ class Info(commands.Cog):
         embed.set_footer(text=f"ID: {self.bot.user.id}")
         await ctx.send(embed=embed)
 
-    @commands.command(name="serverlist", aliases=["guilds", "سێرڤەرەکان"])
+    @commands.hybrid_command(name="serverlist", aliases=["guilds", "سێرڤەرەکان"])
     @commands.is_owner()
     async def serverlist(self, ctx):
         """پێڕستی سێرڤەرەکانی بۆت (تەنها خاوەن)"""
@@ -80,7 +80,7 @@ class Info(commands.Cog):
             msg += f"- **{guild.name}** - {guild.member_count} ئەندام\n"
         await ctx.send(msg[:2000])
 
-    @commands.command(name="invite", aliases=["invitebot", "بانگهێشت"])
+    @commands.hybrid_command(name="invite", aliases=["invitebot", "بانگهێشت"])
     async def invite(self, ctx):
         """لینکی بانگهێشتکردنی بۆت"""
         perms = discord.Permissions(
@@ -97,7 +97,7 @@ class Info(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.command(name="support", aliases=["پشتیوانی"])
+    @commands.hybrid_command(name="support", aliases=["پشتیوانی"])
     async def support(self, ctx):
         """زانیاری پشتیوانی"""
         embed = discord.Embed(
@@ -107,7 +107,7 @@ class Info(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.command(name="stats", aliases=["statistics", "ئامارەکان"])
+    @commands.hybrid_command(name="stats", aliases=["statistics", "ئامارەکان"])
     async def stats(self, ctx):
         """ئامارەکانی بۆت"""
         total_members = sum(g.member_count for g in self.bot.guilds)
@@ -125,7 +125,7 @@ class Info(commands.Cog):
         embed.add_field(name="🤖 بۆت", value=sum(1 for g in self.bot.guilds for m in g.members if m.bot), inline=True)
         await ctx.send(embed=embed)
 
-    @commands.command(name="roleinfo", aliases=["ri", "زانیاری_ڕۆڵ"])
+    @commands.hybrid_command(name="roleinfo", aliases=["ri", "زانیاری_ڕۆڵ"])
     async def roleinfo(self, ctx, *, role: discord.Role):
         """زانیاری ڕۆڵێک"""
         embed = discord.Embed(
@@ -141,7 +141,7 @@ class Info(commands.Cog):
         embed.add_field(name="دروستکراوە", value=role.created_at.strftime("%Y-%m-%d"), inline=True)
         await ctx.send(embed=embed)
 
-    @commands.command(name="channelinfo", aliases=["ci", "زانیاری_چانێل"])
+    @commands.hybrid_command(name="channelinfo", aliases=["ci", "زانیاری_چانێل"])
     async def channelinfo(self, ctx, *, channel: discord.TextChannel = None):
         """زانیاری چانێلێک"""
         if not channel:
@@ -157,7 +157,7 @@ class Info(commands.Cog):
         embed.add_field(name="دروستکراوە", value=channel.created_at.strftime("%Y-%m-%d"), inline=True)
         await ctx.send(embed=embed)
 
-    @commands.command(name="emoji", aliases=["emojis", "ئیمۆجی"])
+    @commands.hybrid_command(name="emoji", aliases=["emojis", "ئیمۆجی"])
     async def emoji(self, ctx, *, emoji_name: str = None):
         """پیشاندانی ئیمۆجی یان لیستی هەموو ئیمۆجیەکان"""
         if emoji_name:

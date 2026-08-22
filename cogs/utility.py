@@ -1,3 +1,4 @@
+import re
 import asyncio
 import ast
 import datetime
@@ -13,14 +14,14 @@ class Utility(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="ping", aliases=["latency", "پینگ"])
+    @commands.hybrid_command(name="ping", aliases=["latency", "پینگ"])
     async def ping(self, ctx):
         latency = round(self.bot.latency * 1000)
         color = 0x2ecc71 if latency < 100 else (0xf1c40f if latency < 200 else 0xe74c3c)
         embed = discord.Embed(title="🏓 پۆنگ!", description=f"**پینگ:** {latency}ms", color=color)
         await ctx.send(embed=embed)
 
-    @commands.command(name="uptime", aliases=["ut", "کات_کارکردن"])
+    @commands.hybrid_command(name="uptime", aliases=["ut", "کات_کارکردن"])
     async def uptime(self, ctx):
         start = getattr(self.bot, "start_time", None)
         if start is None:
@@ -32,14 +33,14 @@ class Utility(commands.Cog):
         minutes, seconds = divmod(rem, 60)
         await ctx.send(f"⏱ **ماوەی کارکردن:** {days} ڕۆژ، {hours} کاتژمێر، {minutes} خولەک، {seconds} چرکە")
 
-    @commands.command(name="avatar", aliases=["av", "pfp", "وێنەی_ئەندام"])
+    @commands.hybrid_command(name="avatar", aliases=["av", "pfp", "وێنەی_ئەندام"])
     async def avatar(self, ctx, member: discord.Member = None):
         member = member or ctx.author
         embed = discord.Embed(title=f"🖼 وێنەی {member.name}", color=member.color)
         embed.set_image(url=member.display_avatar.url)
         await ctx.send(embed=embed)
 
-    @commands.command(name="userinfo", aliases=["ui", "memberinfo", "زانیاری_ئەندام"])
+    @commands.hybrid_command(name="userinfo", aliases=["ui", "memberinfo", "زانیاری_ئەندام"])
     async def userinfo(self, ctx, member: discord.Member = None):
         member = member or ctx.author
         roles = [r.mention for r in member.roles if r != ctx.guild.default_role]
@@ -55,7 +56,7 @@ class Utility(commands.Cog):
         embed.add_field(name="دروستکردنی ئەکاونت", value=discord.utils.format_dt(member.created_at, "D"), inline=True)
         await ctx.send(embed=embed)
 
-    @commands.command(name="serverinfo", aliases=["si", "guildinfo", "زانیاری_سێرڤەر"])
+    @commands.hybrid_command(name="serverinfo", aliases=["si", "guildinfo", "زانیاری_سێرڤەر"])
     async def serverinfo(self, ctx):
         guild = ctx.guild
         owner = guild.owner.mention if guild.owner else "نەزانراو"
@@ -70,22 +71,28 @@ class Utility(commands.Cog):
         embed.add_field(name="ڕۆڵەکان", value=str(len(guild.roles)), inline=True)
         await ctx.send(embed=embed)
 
-    @commands.command(name="poll", aliases=["vote", "survey", "ڕاپرسی"])
+    @commands.hybrid_command(name="poll", aliases=["vote", "survey", "ڕاپرسی"])
     @commands.has_permissions(manage_messages=True)
     @commands.bot_has_permissions(add_reactions=True, embed_links=True)
-    async def poll(self, ctx, question: str, *options):
-        if not 2 <= len(options) <= 10:
+    async def poll(self, ctx, question: str, options: str):
+        """دروستکردنی ڕاپرسی؛ هەڵبژاردەکان بە | یان کۆما جیا بکەرەوە."""
+        parsed = [
+            item.strip()
+            for item in re.split(r"\\s*\\|\\s*|\\s*,\\s*", options)
+            if item.strip()
+        ]
+        if not 2 <= len(parsed) <= 10:
             return await ctx.send("❌ بەلایەنی کەم ٢ و زۆرترین ١٠ هەڵبژاردە.")
         emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
         embed = discord.Embed(title=f"📊 {question}", color=0x3498db)
-        for i, option in enumerate(options):
+        for i, option in enumerate(parsed):
             embed.add_field(name=f"{emojis[i]} {option}", value="دەنگبدە! 🗳", inline=True)
         embed.set_footer(text=f"لەلایەن {ctx.author.name}")
         msg = await ctx.send(embed=embed)
-        for i in range(len(options)):
+        for i in range(len(parsed)):
             await msg.add_reaction(emojis[i])
 
-    @commands.command(name="remind", aliases=["reminder", "بیرخستنەوە"])
+    @commands.hybrid_command(name="remind", aliases=["reminder", "بیرخستنەوە"])
     async def remind(self, ctx, time_text: str, *, text: str):
         units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
         if not time_text or time_text[-1].lower() not in units:
@@ -104,7 +111,7 @@ class Utility(commands.Cog):
         with suppress(discord.Forbidden, discord.HTTPException):
             await ctx.author.send(f"⏰ **بیرخستنەوە:** {text}")
 
-    @commands.command(name="translate", aliases=["tr", "وەرگێڕان"])
+    @commands.hybrid_command(name="translate", aliases=["tr", "وەرگێڕان"])
     async def translate(self, ctx, target: str, *, text: str):
         if not re_safe_lang(target):
             return await ctx.send("❌ کۆدی زمان نادروستە.")
@@ -123,7 +130,7 @@ class Utility(commands.Cog):
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
             await ctx.send("❌ کێشەیەک لە وەرگێڕان ڕوویدا.")
 
-    @commands.command(name="calculator", aliases=["calc", "math", "ژمێر"])
+    @commands.hybrid_command(name="calculator", aliases=["calc", "math", "ژمێر"])
     async def calculator(self, ctx, *, expression: str):
         try:
             result = safe_calculate(expression)

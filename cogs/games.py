@@ -8,7 +8,7 @@ class Games(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="tictactoe", aliases=["ttt", "tic", "دۆزینەوە"])
+    @commands.hybrid_command(name="tictactoe", aliases=["ttt", "tic", "دۆزینەوە"])
     async def tictactoe(self, ctx, member: discord.Member):
         """یاری تیک تەک تۆ بە یاریزانێکی تر"""
         if member == ctx.author:
@@ -63,7 +63,7 @@ class Games(commands.Cog):
                 return board[a]
         return None
 
-    @commands.command(name="guessnumber", aliases=["guess", "مەزەندە"])
+    @commands.hybrid_command(name="guessnumber", aliases=["guess", "مەزەندە"])
     async def guessnumber(self, ctx):
         """مەزەندەکردنی ژمارەیەک لە ١-١٠٠"""
         number = random.randint(1, 100)
@@ -92,7 +92,7 @@ class Games(commands.Cog):
             except asyncio.TimeoutError:
                 return await ctx.send(f"⏰ کاتی تەواو بوو! ژمارەکە **{number}** بوو")
 
-    @commands.command(name="typingrace", aliases=["typing", "خێرایی_نووسین"])
+    @commands.hybrid_command(name="typingrace", aliases=["typing", "خێرایی_نووسین"])
     async def typingrace(self, ctx):
         """پێشبڕکێی خێرایی نووسین"""
         texts = [
@@ -124,7 +124,7 @@ class Games(commands.Cog):
         except asyncio.TimeoutError:
             await ctx.send("⏰ کاتی تەواو بوو!")
 
-    @commands.command(name="quiz", aliases=["trivia", "کویز"])
+    @commands.hybrid_command(name="quiz", aliases=["trivia", "کویز"])
     async def quiz(self, ctx):
         """پرسیاری زانستی"""
         questions = [
@@ -156,7 +156,7 @@ class Games(commands.Cog):
         except asyncio.TimeoutError:
             await ctx.send(f"⏰ کاتی تەواو بوو! وەڵام: {options[correct]}")
 
-    @commands.command(name="hangman", aliases=["هەڵواسین"])
+    @commands.hybrid_command(name="hangman", aliases=["هەڵواسین"])
     async def hangman(self, ctx):
         """یاری هەڵواسین"""
         words = ["پایتۆن", "دیسکۆرد", "کۆماند", "بۆت", "سێرڤەر", "چانێل", "ڕۆڵ"]

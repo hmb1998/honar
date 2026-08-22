@@ -89,7 +89,7 @@ class Github(commands.Cog):
     # GitHub User
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="github",
         aliases=["gh", "گیتهاب"],
     )
@@ -168,7 +168,7 @@ class Github(commands.Cog):
     # Repository
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="repo",
         aliases=["repository", "ڕێپۆ"],
     )
@@ -242,7 +242,7 @@ class Github(commands.Cog):
     # User Repositories
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="repos",
         aliases=["userrepos", "ڕێپۆکانی"],
     )
@@ -293,7 +293,7 @@ class Github(commands.Cog):
     # Stars
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="stars",
         aliases=["topstars", "ئەستێرەکان"],
     )
@@ -359,7 +359,7 @@ class Github(commands.Cog):
     # Issues
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="issues",
         aliases=["iss", "ئیشەکان"],
     )
@@ -421,7 +421,7 @@ class Github(commands.Cog):
     # Pull Requests
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="pr",
         aliases=[
             "pullrequest",
@@ -480,7 +480,7 @@ class Github(commands.Cog):
     # Gists
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="gist",
         aliases=["gists", "گێست"],
     )
@@ -534,7 +534,7 @@ class Github(commands.Cog):
     # Contributors
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="contributors",
         aliases=[
             "contribs",
@@ -595,7 +595,7 @@ class Github(commands.Cog):
     # GitHub Search
     # =========================================================
 
-    @commands.command(
+    @commands.hybrid_command(
         name="gitsearch",
         aliases=[
             "ghsearch",

@@ -23,9 +23,9 @@ class Moderation(commands.Cog):
             return False, "❌ ڕۆڵی ئەندامەکە لە Bot یان بەرزترە."
         return True, None
 
-    @commands.command(name="warn", aliases=["w", "ئاگاداری"])
+    @commands.hybrid_command(name="warn", aliases=["w", "ئاگاداری"])
     @commands.has_permissions(kick_members=True)
-    async def warn(self, ctx, member: discord.Member, *, reason="هۆکار نەدراوە"):
+    async def warn(self, ctx, member: discord.Member, *, reason: str ="هۆکار نەدراوە"):
         ok, error = self.can_moderate(ctx, member)
         if not ok:
             return await ctx.send(error)
@@ -50,7 +50,7 @@ class Moderation(commands.Cog):
         except (discord.Forbidden, discord.HTTPException):
             pass
 
-    @commands.command(name="warnings", aliases=["warns", "ئاگادارییەکان"])
+    @commands.hybrid_command(name="warnings", aliases=["warns", "ئاگادارییەکان"])
     @commands.has_permissions(kick_members=True)
     async def warnings(self, ctx, member: discord.Member):
         warns = self.warning_data.get(self.key(ctx.guild.id, member.id), [])
@@ -66,7 +66,7 @@ class Moderation(commands.Cog):
             embed.set_footer(text=f"{len(warns) - 25} ئاگاداریی تر هەیە.")
         await ctx.send(embed=embed)
 
-    @commands.command(name="delwarn", aliases=["dw", "removewarn", "سڕینەوەی_ئاگاداری"])
+    @commands.hybrid_command(name="delwarn", aliases=["dw", "removewarn", "سڕینەوەی_ئاگاداری"])
     @commands.has_permissions(kick_members=True)
     async def delwarn(self, ctx, member: discord.Member, index: int = None):
         key = self.key(ctx.guild.id, member.id)
@@ -85,7 +85,7 @@ class Moderation(commands.Cog):
         self.warning_data.pop(key, None)
         await ctx.send(f"✅ هەموو ئاگادارییەکانی **{member}** سڕانەوە.")
 
-    @commands.command(name="voicekick", aliases=["vkick", "disconnect", "دەرکردن_لە_ڤۆیس"])
+    @commands.hybrid_command(name="voicekick", aliases=["vkick", "disconnect", "دەرکردن_لە_ڤۆیس"])
     @commands.has_permissions(move_members=True)
     @commands.bot_has_permissions(move_members=True)
     async def voicekick(self, ctx, member: discord.Member):
@@ -100,7 +100,7 @@ class Moderation(commands.Cog):
         except discord.HTTPException:
             await ctx.send("❌ نەتوانرا ئەندام لە ڤۆیس دەرکرێت.")
 
-    @commands.command(name="voicemove", aliases=["vmove", "گواستنەوە"])
+    @commands.hybrid_command(name="voicemove", aliases=["vmove", "گواستنەوە"])
     @commands.has_permissions(move_members=True)
     @commands.bot_has_permissions(move_members=True)
     async def voicemove(self, ctx, member: discord.Member, *, channel: discord.VoiceChannel):
@@ -115,7 +115,7 @@ class Moderation(commands.Cog):
         except discord.HTTPException:
             await ctx.send("❌ نەتوانرا ئەندام بگوازرێتەوە.")
 
-    @commands.command(name="massrole", aliases=["mass", "ڕۆڵی_گشتی"])
+    @commands.hybrid_command(name="massrole", aliases=["mass", "ڕۆڵی_گشتی"])
     @commands.has_permissions(manage_roles=True)
     @commands.bot_has_permissions(manage_roles=True)
     async def massrole(self, ctx, role: discord.Role):
@@ -139,7 +139,7 @@ class Moderation(commands.Cog):
 
         await ctx.send(f"✅ Role **{role}** زیادکرا بۆ **{count}** ئەندام.\n⚠️ سەرکەوتوو نەبوو: **{failed}**")
 
-    @commands.command(name="banlist", aliases=["bans", "لیستی_قەدەغە"])
+    @commands.hybrid_command(name="banlist", aliases=["bans", "لیستی_قەدەغە"])
     @commands.has_permissions(ban_members=True)
     async def banlist(self, ctx):
         try:
@@ -156,14 +156,14 @@ class Moderation(commands.Cog):
             lines.append(line[:180])
         await ctx.send("\n".join(lines)[:2000])
 
-    @commands.command(name="slowmodeoff", aliases=["slowoff", "لابردنی_هێواشی"])
+    @commands.hybrid_command(name="slowmodeoff", aliases=["slowoff", "لابردنی_هێواشی"])
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
     async def slowmodeoff(self, ctx):
         await ctx.channel.edit(slowmode_delay=0, reason=f"By {ctx.author}")
         await ctx.send("⚡ **مۆدی هێواش لابرا.**")
 
-    @commands.command(name="nuke", aliases=["نۆک"])
+    @commands.hybrid_command(name="nuke", aliases=["نۆک"])
     @commands.has_permissions(administrator=True)
     @commands.bot_has_permissions(manage_channels=True)
     @commands.cooldown(1, 10, commands.BucketType.channel)

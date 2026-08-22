@@ -9,7 +9,7 @@ class Images(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="cat", aliases=["پشیلە"])
+    @commands.hybrid_command(name="cat", aliases=["پشیلە"])
     async def cat(self, ctx):
         """پیشاندانی وێنەی پشیلە"""
         async with aiohttp.ClientSession() as session:
@@ -21,7 +21,7 @@ class Images(commands.Cog):
         embed.set_image(url=data[0]["url"])
         await ctx.send(embed=embed)
 
-    @commands.command(name="dog", aliases=["سەگ"])
+    @commands.hybrid_command(name="dog", aliases=["سەگ"])
     async def dog(self, ctx):
         """پیشاندانی وێنەی سەگ"""
         async with aiohttp.ClientSession() as session:
@@ -33,7 +33,7 @@ class Images(commands.Cog):
         embed.set_image(url=data["message"])
         await ctx.send(embed=embed)
 
-    @commands.command(name="fox", aliases=["ڕێوی"])
+    @commands.hybrid_command(name="fox", aliases=["ڕێوی"])
     async def fox(self, ctx):
         """پیشاندانی وێنەی ڕێوی"""
         async with aiohttp.ClientSession() as session:
@@ -45,7 +45,7 @@ class Images(commands.Cog):
         embed.set_image(url=data["image"])
         await ctx.send(embed=embed)
 
-    @commands.command(name="wanted", aliases=["داواکراو"])
+    @commands.hybrid_command(name="wanted", aliases=["داواکراو"])
     async def wanted(self, ctx, member: discord.Member = None):
         """پۆستەری داواکراو بۆ ئەندامێک"""
         if not member:
@@ -71,7 +71,7 @@ class Images(commands.Cog):
             buf.seek(0)
             await ctx.send(file=discord.File(buf, "wanted.png"))
 
-    @commands.command(name="memecreate", aliases=["creatememe", "میم_دروستبکە"])
+    @commands.hybrid_command(name="memecreate", aliases=["creatememe", "میم_دروستبکە"])
     async def memecreate(self, ctx, *, text: str):
         """دروستکردنی میم بە دەق - !memecreate دەقی سەرەوە | دەقی خوارەوە"""
         if "|" in text:

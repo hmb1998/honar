@@ -8,12 +8,12 @@ class Fun(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="say", aliases=["echo", "repeat", "بڵێ"])
+    @commands.hybrid_command(name="say", aliases=["echo", "repeat", "بڵێ"])
     async def say(self, ctx, *, message: str):
         """ناردنی نامەیەک لەجیاتی تۆ"""
         await ctx.send(message)
 
-    @commands.command(name="8ball", aliases=["eightball", "fortune", "تۆپی_هەشت"])
+    @commands.hybrid_command(name="8ball", aliases=["eightball", "fortune", "تۆپی_هەشت"])
     async def eightball(self, ctx, *, question: str):
         """پیشبینی بە تۆپی ٨"""
         answers = [
@@ -33,7 +33,7 @@ class Fun(commands.Cog):
         embed.set_footer(text=f"لەلایەن {ctx.author.name}")
         await ctx.send(embed=embed)
 
-    @commands.command(name="coinflip", aliases=["coin", "flip", "هەڵدانی_دراو"])
+    @commands.hybrid_command(name="coinflip", aliases=["coin", "flip", "هەڵدانی_دراو"])
     async def coinflip(self, ctx):
         """هەڵدانی دراو - هێڵ یان نەخش"""
         result = random.choice(["هێڵ (Heads) 🪙", "نەخش (Tails) 🪙"])
@@ -44,7 +44,7 @@ class Fun(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.command(name="dice", aliases=["roll", "تەختەی_ژمارە"])
+    @commands.hybrid_command(name="dice", aliases=["roll", "تەختەی_ژمارە"])
     async def dice(self, ctx, sides: int = 6):
         """هەڵدانی تەختەی ژمارە (زیاتر لە ١٠٠٠ نا)"""
         if sides < 1 or sides > 1000:
@@ -57,7 +57,7 @@ class Fun(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.command(name="meme", aliases=["میم"])
+    @commands.hybrid_command(name="meme", aliases=["میم"])
     async def meme(self, ctx, subreddit: str = "memes"):
         """پیشاندانی میم لە ڕێددیت"""
         async with aiohttp.ClientSession() as session:
@@ -73,7 +73,7 @@ class Fun(commands.Cog):
         embed.set_footer(text=f"👍 {data.get('ups', 0)} | r/{data.get('subreddit', subreddit)}")
         await ctx.send(embed=embed)
 
-    @commands.command(name="joke", aliases=["jokes", "گاڵتە"])
+    @commands.hybrid_command(name="joke", aliases=["jokes", "گاڵتە"])
     async def joke(self, ctx):
         """گاڵتەیەکی هەرەمەکی"""
         async with aiohttp.ClientSession() as session:
@@ -84,7 +84,7 @@ class Fun(commands.Cog):
             else:
                 await ctx.send(f"😂 {data['setup']}\n\n||{data['delivery']}||")
 
-    @commands.command(name="fact", aliases=["facts", "ڕاستی"])
+    @commands.hybrid_command(name="fact", aliases=["facts", "ڕاستی"])
     async def fact(self, ctx):
         """ڕاستییەکی هەرەمەکی"""
         async with aiohttp.ClientSession() as session:
@@ -92,20 +92,21 @@ class Fun(commands.Cog):
                 data = await r.json()
         await ctx.send(f"💡 **ڕاستی:** {data.get('text', 'نەدۆزرایەوە')}")
 
-    @commands.command(name="reverse", aliases=["rev", "پێچەوانە"])
+    @commands.hybrid_command(name="reverse", aliases=["rev", "پێچەوانە"])
     async def reverse(self, ctx, *, text: str):
         """پێچەوانەکردنەوەی دەق"""
         await ctx.send(text[::-1][:2000])
 
-    @commands.command(name="choose", aliases=["pick", "ch", "هەڵبژاردن"])
-    async def choose(self, ctx, *options):
-        """هەڵبژاردن لە نێوان چەند شتێک (بە کۆما جیا بکەرەوە)"""
-        if len(options) < 2:
-            return await ctx.send("❌ بەلایەنی کەم ٢ شت بنووسە")
-        result = random.choice(options)
+    @commands.hybrid_command(name="choose", aliases=["pick", "ch", "هەڵبژاردن"])
+    async def choose(self, ctx, options: str):
+        """هەڵبژاردن لە نێوان چەند شتێک؛ هەڵبژاردەکان بە کۆما جیا بکەرەوە."""
+        choices = [item.strip() for item in options.split(",") if item.strip()]
+        if len(choices) < 2:
+            return await ctx.send("❌ بەلایەنی کەم ٢ هەڵبژاردە بنووسە و بە کۆما جیاکیان بکەرەوە.")
+        result = random.choice(choices)
         await ctx.send(f"🤔 **من هەڵدەبژێڕم:** {result}")
 
-    @commands.command(name="rps", aliases=["rockpaperscissors", "کەقەز_تێر_هەڵمەت"])
+    @commands.hybrid_command(name="rps", aliases=["rockpaperscissors", "کەقەز_تێر_هەڵمەت"])
     async def rps(self, ctx, choice: str):
         """کەقەز، تێر، هەڵمەت (rock/paper/scissors)"""
         choices = {"کەقەز": "rock", "تێر": "scissors", "هەڵمەت": "paper",
