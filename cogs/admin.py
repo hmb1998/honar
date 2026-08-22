@@ -16,9 +16,11 @@ class Admin(commands.Cog):
             return False, "❌ ناتوانیت خۆت moderate بکەیت."
         if member == ctx.guild.owner:
             return False, "❌ ناتوانیت خاوەنی سێرڤەر moderate بکەیت."
-        if me and member >= me:
+        if me and member == me:
+            return False, "❌ ناتوانیت خۆت moderate بکەیت."
+        if me and member.top_role >= me.top_role:
             return False, "❌ ڕۆڵی ئەندامەکە لە Bot یان بەرزترە."
-        if ctx.author != ctx.guild.owner and member >= ctx.author:
+        if ctx.author != ctx.guild.owner and member.top_role >= ctx.author.top_role:
             return False, "❌ ڕۆڵی ئەندامەکە لە تۆ یان بەرزترە."
         return True, None
 
