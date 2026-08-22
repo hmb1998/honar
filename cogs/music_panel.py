@@ -37,9 +37,13 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 HMB NEXUS Music Search"):
         except Exception as exc:
             logger.exception("Music panel search failed: %r", query)
             message = str(exc).lower()
-            if "sign in to confirm" in message or "cookies" in message or "bot" in message:
+            if any(x in message for x in (
+                "sign in to confirm", "confirm you're not a bot",
+                "login required", "po token", "http error 403",
+            )):
                 return await interaction.followup.send(
-                    "❌ YouTube Login/Cookie داوا دەکات. `YOUTUBE_COOKIE` لە Railway دابنێ و Redeploy بکە.",
+                    "❌ YouTube لەم کاتەدا ئەم گۆرانییە بە anonymous access ڕەتکردەوە. "
+                    "🔄 لینک یان ناوی گۆرانییەکی تر تاقی بکەرەوە؛ Cookie پێویست نییە.",
                     ephemeral=True,
                 )
             return await interaction.followup.send(

@@ -17,25 +17,28 @@ FFMPEG_OPTIONS = {
     "options": "-vn",
 }
 
-# YouTube can challenge hosted IPs with bot verification.
-# Optional Railway variable: YOUTUBE_COOKIE=<Cookie header value>
-YOUTUBE_COOKIE = os.getenv("YOUTUBE_COOKIE", "").strip()
+# YouTube anonymous playback configuration.
+# IMPORTANT: this bot intentionally does NOT require YOUTUBE_COOKIE.
+# We try several public clients because YouTube changes which clients can
+# stream without an authenticated browser session.
+YOUTUBE_CLIENTS = [
+    "android_vr",
+    "tv",
+    "web_embedded",
+    "web_safari",
+    "web",
+]
 
-YDL_OPTIONS = {
+BASE_YDL_OPTIONS = {
     "format": "bestaudio/best",
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
     "default_search": "ytsearch",
-    "extractor_args": {
-        "youtube": {
-            "player_client": ["android", "web"],
-        }
-    },
+    "retries": 2,
+    "fragment_retries": 2,
+    "socket_timeout": 15,
 }
-
-if YOUTUBE_COOKIE:
-    YDL_OPTIONS["http_headers"] = {"Cookie": YOUTUBE_COOKIE}
 
 YOUTUBE_URL = re.compile(
     r"^(https?://)?(www\.)?(youtube\.com|youtu\.be)/",
@@ -54,25 +57,49 @@ class Music(commands.Cog):
 
     @staticmethod
     def _extract(query: str) -> Optional[dict]:
-        with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info(query, download=False)
+        last_error = None
 
-        if not info:
-            return None
+        # Try anonymous/public clients one by one. No cookie is required.
+        for client in YOUTUBE_CLIENTS:
+            options = {
+                **BASE_YDL_OPTIONS,
+                "extractor_args": {
+                    "youtube": {
+                        "player_client": [client],
+                    }
+                },
+            }
+            try:
+                with yt_dlp.YoutubeDL(options) as ydl:
+                    info = ydl.extract_info(query, download=False)
 
-        if "entries" in info:
-            entries = [entry for entry in info["entries"] if entry]
-            if not entries:
-                return None
-            info = entries[0]
+                if not info:
+                    continue
 
-        return {
-            "url": info.get("webpage_url") or info.get("original_url") or query,
-            "stream_url": info.get("url"),
-            "title": info.get("title", "نەناسراو"),
-            "duration": int(info.get("duration") or 0),
-            "thumbnail": info.get("thumbnail"),
-        }
+                if "entries" in info:
+                    entries = [entry for entry in info["entries"] if entry]
+                    if not entries:
+                        continue
+                    info = entries[0]
+
+                stream_url = info.get("url")
+                if not stream_url:
+                    continue
+
+                return {
+                    "url": info.get("webpage_url") or info.get("original_url") or query,
+                    "stream_url": stream_url,
+                    "title": info.get("title", "نەناسراو"),
+                    "duration": int(info.get("duration") or 0),
+                    "thumbnail": info.get("thumbnail"),
+                }
+            except Exception as exc:
+                last_error = exc
+                logger.warning("Anonymous YouTube client %s failed: %s", client, str(exc)[:250])
+
+        if last_error:
+            raise last_error
+        return None
 
     async def _resolve(self, query: str) -> Optional[dict]:
         return await asyncio.to_thread(self._extract, query)
@@ -81,10 +108,14 @@ class Music(commands.Cog):
         text = str(exc)
         lowered = text.lower()
 
-        if "sign in to confirm" in lowered or "cookies" in lowered or "bot" in lowered:
+        if any(x in lowered for x in (
+            "sign in to confirm", "confirm you're not a bot",
+            "login required", "po token", "http error 403",
+        )):
             await ctx.send(
-                "❌ YouTube داواکاری Login/Cookie دەکات.\n"
-                "لە Railway ـدا `YOUTUBE_COOKIE` دابنێ، پاشان Redeploy بکە."
+                "❌ YouTube لەم کاتەدا دەستپێگەیشتنی anonymous ـی ئەم لینکە ڕەتکردەوە.\n"
+                "🔄 لینکێکی تری YouTube یان ناوی گۆرانییەکی تر تاقی بکەرەوە. "
+                "ئەم سیستەمە بەبێ Cookie چەند client ـێک خۆکارانە تاقی دەکاتەوە."
             )
             return
 
