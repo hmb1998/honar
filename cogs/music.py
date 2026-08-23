@@ -110,6 +110,19 @@ class Music(commands.Cog):
         return self._download_lock.setdefault(guild_id, asyncio.Lock())
 
     @staticmethod
+    def _cleanup_song(song: Optional[dict]) -> None:
+        if not song:
+            return
+        temp_dir = song.get("temp_dir")
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @classmethod
+    def _cleanup_songs(cls, songs: list[dict]) -> None:
+        for song in songs:
+            cls._cleanup_song(song)
+
+    @staticmethod
     def _youtube_video_id(value: str) -> Optional[str]:
         try:
             parsed = urlparse(value)
@@ -366,7 +379,8 @@ class Music(commands.Cog):
             # when the actual media download is allowed.  The download path
             # already uses the configured PO-token provider/cookies and returns
             # a local audio file, so use it directly for /play.
-            song = await asyncio.to_thread(self._download_audio, source_query)
+            async with self._guild_lock(ctx.guild.id):
+                song = await asyncio.to_thread(self._download_audio, source_query)
         except Exception as exc:
             logger.exception("YouTube download failed for %r", query)
             await self._send_play_error(ctx, exc)
@@ -394,8 +408,13 @@ class Music(commands.Cog):
 
     @commands.hybrid_command(name="stop", aliases=("leave", "dc", "وەستان"))
     async def stop(self, ctx):
-        self.queues[ctx.guild.id] = []
-        self.now_playing[ctx.guild.id] = None
+        guild_id = ctx.guild.id
+        queued = self.queues.get(guild_id, [])
+        current = self.now_playing.get(guild_id)
+        self._cleanup_songs(queued)
+        self._cleanup_song(current)
+        self.queues[guild_id] = []
+        self.now_playing[guild_id] = None
         if ctx.voice_client:
             await ctx.voice_client.disconnect()
             await ctx.send("👋 **بۆت لە Voice دەرچوو.**")
@@ -473,13 +492,17 @@ class Music(commands.Cog):
         queue = self.get_queue(ctx.guild.id)
         if 1 <= index <= len(queue):
             removed = queue.pop(index - 1)
+            self._cleanup_song(removed)
             await ctx.send(f"🗑 **لابردرا:** {removed.get('title', 'گۆرانی')}")
         else:
             await ctx.send(f"❌ ژمارە نادروستە. ڕیز `{len(queue)}` گۆرانی هەیە.")
 
     @commands.hybrid_command(name="clearqueue", aliases=("cq", "clearq", "بەتاڵ"))
     async def clearqueue(self, ctx):
-        self.queues[ctx.guild.id] = []
+        guild_id = ctx.guild.id
+        queued = self.queues.get(guild_id, [])
+        self._cleanup_songs(queued)
+        self.queues[guild_id] = []
         await ctx.send("🗑 **ڕیز بەتاڵکرایەوە.**")
 
 

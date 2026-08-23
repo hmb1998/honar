@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import random
 from typing import Optional
@@ -30,6 +31,18 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 HMB NEXUS Music Search"):
                 "❌ Music cog بەردەست نییە.", ephemeral=True
             )
 
+        guild = interaction.guild
+        if guild is None:
+            return await interaction.followup.send(
+                "❌ ئەم کارە تەنها لە سێرڤەر کار دەکات.", ephemeral=True
+            )
+
+        member = guild.get_member(interaction.user.id)
+        if member is None or member.voice is None or member.voice.channel is None:
+            return await interaction.followup.send(
+                "🔇 سەرەتا بچۆ ناو Voice Channel.", ephemeral=True
+            )
+
         try:
             from .music import YOUTUBE_URL
             source_query = query if YOUTUBE_URL.match(query) else f"ytsearch:{query}"
@@ -40,7 +53,12 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 HMB NEXUS Music Search"):
             # you're not a bot". The normal /play path ultimately downloads
             # the media successfully on this Railway deployment. Do the same
             # here so Music Panel uses the exact same yt-dlp + PO-token path.
-            song = music._download_audio(source_query)
+            # yt-dlp is blocking I/O; never run it directly on Discord's
+            # asyncio event loop. Reuse the same per-guild download lock as /play.
+            async with music._guild_lock(guild.id):
+                song = await asyncio.to_thread(
+                    music._download_audio, source_query
+                )
             if song:
                 song["requester"] = interaction.user
         except Exception as exc:
@@ -63,18 +81,6 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 HMB NEXUS Music Search"):
         if not song:
             return await interaction.followup.send(
                 "❌ هیچ گۆرانییەک نەدۆزرایەوە.", ephemeral=True
-            )
-
-        guild = interaction.guild
-        if guild is None:
-            return await interaction.followup.send(
-                "❌ ئەم کارە تەنها لە سێرڤەر کار دەکات.", ephemeral=True
-            )
-
-        member = guild.get_member(interaction.user.id)
-        if member is None or member.voice is None or member.voice.channel is None:
-            return await interaction.followup.send(
-                "🔇 سەرەتا بچۆ ناو Voice Channel.", ephemeral=True
             )
 
         song["requester"] = interaction.user
