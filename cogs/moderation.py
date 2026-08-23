@@ -17,9 +17,9 @@ class Moderation(commands.Cog):
             return False, "❌ ناتوانیت خۆت moderate بکەیت."
         if member == ctx.guild.owner:
             return False, "❌ ناتوانیت خاوەنی سێرڤەر moderate بکەیت."
-        if ctx.author != ctx.guild.owner and member >= ctx.author:
+        if ctx.author != ctx.guild.owner and member.top_role >= ctx.author.top_role:
             return False, "❌ ڕۆڵی ئەندامەکە لە تۆ یان بەرزترە."
-        if ctx.guild.me and member >= ctx.guild.me:
+        if ctx.guild.me and member.top_role >= ctx.guild.me.top_role:
             return False, "❌ ڕۆڵی ئەندامەکە لە Bot یان بەرزترە."
         return True, None
 

@@ -100,7 +100,7 @@ class Economy(commands.Cog):
         self.save_data()
         embed = discord.Embed(
             title="💼 کارکردن",
-            description=f"**کار:** {job}\n**داهات:** +{total} 💰\n**XP:** +{random.randint(5, 15)} ✨",
+            description=f"**کار:** {job}\n**داهات:** +{total} 💰\n**XP:** +{xp_gain} ✨",
             color=0x3498db
         )
         await ctx.send(embed=embed)
