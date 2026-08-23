@@ -355,9 +355,15 @@ class Music(commands.Cog):
         try:
             target_query = query.strip()
             source_query = target_query if YOUTUBE_URL.match(target_query) else f"ytsearch:{target_query}"
-            song = await self._resolve(source_query)
+
+            # IMPORTANT: On Railway/modern YouTube, metadata-only extract_info()
+            # can be rejected with "Sign in to confirm you're not a bot" even
+            # when the actual media download is allowed.  The download path
+            # already uses the configured PO-token provider/cookies and returns
+            # a local audio file, so use it directly for /play.
+            song = await asyncio.to_thread(self._download_audio, source_query)
         except Exception as exc:
-            logger.exception("YouTube/source resolve failed for %r", query)
+            logger.exception("YouTube download failed for %r", query)
             await self._send_play_error(ctx, exc)
             return
 
