@@ -6,3 +6,7 @@ __pycache__/
 venv/
 data/economy_data.json
 data/economy_data.tmp
+
+# Never commit YouTube session cookies
+cookies.txt
+*.cookies.txt
