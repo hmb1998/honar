@@ -259,10 +259,15 @@ class Music(commands.Cog):
         temp_dir: Optional[str] = None
 
         try:
-            async with self._guild_lock(guild_id):
-                # Re-resolve/download immediately before playback so temporary
-                # YouTube URLs are never reused from an earlier request.
-                info = await asyncio.to_thread(self._download_audio, song["url"])
+            # Music Panel may already have downloaded the track. Reuse that
+            # local file instead of asking YouTube for the same track twice.
+            if song.get("audio_file") and Path(song["audio_file"]).is_file():
+                info = dict(song)
+            else:
+                async with self._guild_lock(guild_id):
+                    # Re-resolve/download immediately before playback so temporary
+                    # YouTube URLs are never reused from an earlier request.
+                    info = await asyncio.to_thread(self._download_audio, song["url"])
 
             if not info or not info.get("audio_file"):
                 raise RuntimeError("گۆرانییەکە download نەکرا")

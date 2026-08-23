@@ -33,7 +33,16 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 HMB NEXUS Music Search"):
         try:
             from .music import YOUTUBE_URL
             source_query = query if YOUTUBE_URL.match(query) else f"ytsearch:{query}"
-            song = await music._resolve(source_query)
+
+            # IMPORTANT:
+            # YouTube may allow the actual media download while rejecting a
+            # metadata-only extract_info() request with "Sign in to confirm
+            # you're not a bot". The normal /play path ultimately downloads
+            # the media successfully on this Railway deployment. Do the same
+            # here so Music Panel uses the exact same yt-dlp + PO-token path.
+            song = await music._download_audio(source_query)
+            if song:
+                song["requester"] = interaction.user
         except Exception as exc:
             logger.exception("Music panel search failed: %r", query)
             message = str(exc).lower()
@@ -42,8 +51,9 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 HMB NEXUS Music Search"):
                 "login required", "po token", "http error 403",
             )):
                 return await interaction.followup.send(
-                    "❌ YouTube لەم کاتەدا ئەم گۆرانییە بە anonymous access ڕەتکردەوە. "
-                    "🔄 لینک یان ناوی گۆرانییەکی تر تاقی بکەرەوە؛ Cookie پێویست نییە.",
+                    "❌ YouTube ئەم داواکارییەی لە Music Panel ـەوە ڕەتکردەوە. "
+                    "🔐 ئەگەر لە /play ـیش هەمان کێشە هەیە، YOUTUBE_COOKIE_FILE دابین بکە؛ "
+                    "ئەگەر /play کار دەکات، دووبارە Search بکە.",
                     ephemeral=True,
                 )
             return await interaction.followup.send(
