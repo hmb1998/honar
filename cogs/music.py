@@ -69,11 +69,16 @@ def _base_ydl_options(client: str, *, download: bool = False, outtmpl: str = "")
         },
     }
 
-    # Optional browser cookies. The bot works without them when YouTube allows
-    # anonymous playback, but an operator can provide a valid cookies file if
-    # YouTube requires authentication for a particular video/IP.
+    # Optional YouTube cookies. On Railway, keep the cookie content in a
+    # private environment variable instead of committing cookies.txt to GitHub.
+    # YOUTUBE_COOKIES may contain the full Netscape cookies.txt text.
+    cookie_text = os.getenv("YOUTUBE_COOKIES", "").strip()
     cookie_file = os.getenv("YOUTUBE_COOKIE_FILE", "").strip()
-    if cookie_file and Path(cookie_file).is_file():
+    if cookie_text:
+        runtime_cookie = Path("/tmp/youtube-cookies.txt")
+        runtime_cookie.write_text(cookie_text + "\n", encoding="utf-8")
+        options["cookiefile"] = str(runtime_cookie)
+    elif cookie_file and Path(cookie_file).is_file():
         options["cookiefile"] = cookie_file
 
     if download:
