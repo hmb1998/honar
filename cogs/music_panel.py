@@ -40,7 +40,7 @@ class MusicSearchModal(discord.ui.Modal, title="🎵 HMB NEXUS Music Search"):
             # you're not a bot". The normal /play path ultimately downloads
             # the media successfully on this Railway deployment. Do the same
             # here so Music Panel uses the exact same yt-dlp + PO-token path.
-            song = await music._download_audio(source_query)
+            song = music._download_audio(source_query)
             if song:
                 song["requester"] = interaction.user
         except Exception as exc:
