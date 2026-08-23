@@ -22,3 +22,11 @@ Do not put YouTube cookies in the public repository.
 
 After deployment, check Railway logs for:
 `BgUtils PO-token provider is ready`
+
+
+## Music Panel patch
+- Music Panel Search now uses the same yt-dlp download path as playback.
+- This avoids failing on metadata-only YouTube extraction when YouTube returns
+  "Sign in to confirm you're not a bot" but the actual media download succeeds.
+- Already-downloaded panel tracks are reused by the player, so the same track
+  is not downloaded twice.
