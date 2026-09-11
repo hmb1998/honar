@@ -1,34 +1,23 @@
 import discord
 from discord.ext import commands
 import random
-import json
 import os
-import tempfile
-from pathlib import Path
 from datetime import datetime as dt, timezone
+
+from database import EconomyDatabase
 
 
 class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.data_file = Path(__file__).resolve().parent.parent / "data" / "economy_data.json"
-        self.data_file.parent.mkdir(parents=True, exist_ok=True)
+        self.db = EconomyDatabase()
         self.data = self.load_data()
 
     def load_data(self):
-        if os.path.exists(self.data_file):
-            try:
-                with self.data_file.open("r", encoding="utf-8") as f:
-                    return json.load(f)
-            except (OSError, ValueError, TypeError):
-                return {}
-        return {}
+        return self.db.load()
 
     def save_data(self):
-        temp_path = self.data_file.with_suffix(".tmp")
-        with temp_path.open("w", encoding="utf-8") as f:
-            json.dump(self.data, f, indent=4, ensure_ascii=False)
-        os.replace(temp_path, self.data_file)
+        self.db.save(self.data)
 
     def get_user(self, user_id):
         user_id = str(user_id)
