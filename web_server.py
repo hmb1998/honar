@@ -36,6 +36,12 @@ class PolicyHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"[WEB] {self.address_string()} - {fmt % args}", flush=True)
 
+@app.get("/healthz")
+def healthz():
+    """Render/UptimeRobot health check endpoint."""
+    return "OK", 200
+
+
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer(("0.0.0.0", PORT), PolicyHandler)
