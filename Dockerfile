@@ -35,4 +35,4 @@ COPY . .
 RUN python -m pip show bgutil-ytdlp-pot-provider >/dev/null \
     && python -c "import yt_dlp; print('yt-dlp:', yt_dlp.version.__version__)"
 
-CMD ["sh", "-c", "deno run -A /opt/bgutil-ytdlp-pot-provider/server/src/main.ts >/tmp/bgutil-pot.log 2>&1 & for i in $(seq 1 30); do if curl -fsS http://127.0.0.1:4416/ping >/dev/null 2>&1; then echo \"BgUtils PO-token provider is ready\"; break; fi; sleep 1; done; python web_server.py & exec python main.py"]
+CMD ["sh", "-c", "python web_server.py >/tmp/hmb-web.log 2>&1 & WEB_PID=$!; for i in $(seq 1 15); do if curl -fsS http://127.0.0.1:${PORT:-8080}/healthz >/dev/null 2>&1; then echo \"HMB health server is ready on ${PORT:-8080}\"; break; fi; sleep 1; done; deno run -A /opt/bgutil-ytdlp-pot-provider/server/src/main.ts >/tmp/bgutil-pot.log 2>&1 & for i in $(seq 1 30); do if curl -fsS http://127.0.0.1:4416/ping >/dev/null 2>&1; then echo \"BgUtils PO-token provider is ready on 127.0.0.1:4416\"; break; fi; sleep 1; done; exec python main.py"]

@@ -26,7 +26,13 @@ class PolicyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?", 1)[0].rstrip("/") or "/"
 
-        if path in ("/", "/terms.html"):
+        if path == "/healthz":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(b"OK")
+        elif path in ("/", "/terms.html"):
             self.send_file("terms.html")
         elif path == "/privacy.html":
             self.send_file("privacy.html")
@@ -35,11 +41,6 @@ class PolicyHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         print(f"[WEB] {self.address_string()} - {fmt % args}", flush=True)
-
-@app.get("/healthz")
-def healthz():
-    return "OK", 200
-
 
 
 if __name__ == "__main__":
