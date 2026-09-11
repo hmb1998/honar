@@ -38,7 +38,6 @@ class PolicyHandler(BaseHTTPRequestHandler):
 
 @app.get("/healthz")
 def healthz():
-    """Render/UptimeRobot health check endpoint."""
     return "OK", 200
 
 

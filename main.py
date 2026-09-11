@@ -902,3 +902,36 @@ if __name__ == "__main__":
         logger.info(
             "Bot stopped."
         )
+
+# HMB_RENDER_HEALTH_SERVER
+def _start_render_health_server():
+    """Run the Render health endpoint without blocking the Discord bot."""
+    try:
+        import os as _os
+        import threading as _threading
+        from flask import Flask as _Flask
+        from waitress import serve as _serve
+
+        _health_app = _Flask("hmb_render_health")
+
+        @_health_app.get("/")
+        def _health_root():
+            return "HMB GLOBAL OK", 200
+
+        @_health_app.get("/healthz")
+        def _healthz():
+            return "OK", 200
+
+        _port = int(_os.getenv("PORT", "10000"))
+        _threading.Thread(
+            target=_serve,
+            args=(_health_app,),
+            kwargs={"host": "0.0.0.0", "port": _port, "threads": 2},
+            daemon=True,
+            name="hmb-render-health",
+        ).start()
+    except Exception as _exc:
+        print(f"[HMB] Health server failed to start: {_exc}")
+
+_start_render_health_server()
+
