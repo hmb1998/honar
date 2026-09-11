@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 
 import discord
 import aiohttp
-from discord.ext import commands
+from discord.ext import commands, tasks
+
+from cleanup import cleanup_old_temp_files
 
 from config import (
     DISCORD_TOKEN,
@@ -869,6 +871,20 @@ async def on_app_command_error(
 
 
 # ============================================================
+# TEMPORARY FILE CLEANUP
+# ============================================================
+
+@tasks.loop(minutes=10)
+async def temp_cleanup_loop():
+    await asyncio.to_thread(cleanup_old_temp_files)
+
+
+@temp_cleanup_loop.before_loop
+async def before_temp_cleanup_loop():
+    await bot.wait_until_ready()
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -878,11 +894,17 @@ async def main():
         timezone.utc
     )
 
-    async with bot:
+    cleanup_old_temp_files()
+    temp_cleanup_loop.start()
 
-        await bot.start(
-            DISCORD_TOKEN
-        )
+    try:
+        async with bot:
+            await bot.start(
+                DISCORD_TOKEN
+            )
+    finally:
+        if temp_cleanup_loop.is_running():
+            temp_cleanup_loop.cancel()
 
 
 # ============================================================
