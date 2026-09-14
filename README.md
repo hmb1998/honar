@@ -19,7 +19,7 @@ Built with ❤️ by **HONAR** for modern Discord communities.
 
 ## 🌌 What is HMB • NEXUS?
 
-**HMB • NEXUS** is a professional all-in-one Discord bot designed to bring the most important server tools into one powerful system.
+**HMB • NEXUS** is a professional all-in-one Discord bot designed to bring the most important server tools into one powerful system..
 
 Instead of running separate bots for music, moderation, games, economy and utilities, NEXUS combines them into a single organized application with a custom **Music Control Panel**, HMB application emojis, slash commands and Railway-ready deployment.
 
