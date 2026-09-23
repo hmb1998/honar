@@ -69,19 +69,22 @@ def _base_ydl_options(client: str, *, download: bool = False, outtmpl: str = "")
         },
     }
 
-    # Optional YouTube cookies. On Railway/Render, read from secret file or env.
+        # Optional YouTube cookies. Copy from secret to /tmp to avoid read-only file system error.
     secret_cookie = Path("/etc/secrets/cookies.txt")
     cookie_file = os.getenv("YOUTUBE_COOKIE_FILE", "").strip()
     cookie_text = os.getenv("YOUTUBE_COOKIES", "").strip()
 
     if secret_cookie.is_file():
-        options["cookiefile"] = str(secret_cookie)
+        runtime_cookie = Path("/tmp/youtube-cookies.txt")
+        shutil.copy(secret_cookie, runtime_cookie)
+        options["cookiefile"] = str(runtime_cookie)
     elif cookie_file and Path(cookie_file).is_file():
         options["cookiefile"] = cookie_file
     elif cookie_text:
         runtime_cookie = Path("/tmp/youtube-cookies.txt")
         runtime_cookie.write_text(cookie_text + "\n", encoding="utf-8")
         options["cookiefile"] = str(runtime_cookie)
+
 
     if download:
         options.update(
