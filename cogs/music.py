@@ -69,10 +69,8 @@ def _base_ydl_options(client: str, *, download: bool = False, outtmpl: str = "")
         },
     }
 
-    # Optional YouTube cookies. On Railway, keep the cookie content in a
-    # private environment variable instead of committing cookies.txt to GitHub.
-    # YOUTUBE_COOKIES may contain the full Netscape cookies.txt text.
-        secret_cookie = Path("/etc/secrets/cookies.txt")
+    # Optional YouTube cookies. On Railway/Render, read from secret file or env.
+    secret_cookie = Path("/etc/secrets/cookies.txt")
     cookie_file = os.getenv("YOUTUBE_COOKIE_FILE", "").strip()
     cookie_text = os.getenv("YOUTUBE_COOKIES", "").strip()
 
@@ -168,9 +166,6 @@ class Music(commands.Cog):
                 if not info:
                     continue
 
-                # A resolved stream URL is still returned for compatibility
-                # with the existing panel/queue. Playback itself does NOT feed
-                # this URL to ffmpeg; it downloads through yt-dlp first.
                 return {
                     "url": info.get("webpage_url") or info.get("original_url") or query,
                     "title": info.get("title") or "نەناسراو",
@@ -188,13 +183,6 @@ class Music(commands.Cog):
 
     @classmethod
     def _download_audio(cls, query: str) -> dict:
-        """Download the audio with yt-dlp, then let FFmpeg read a local file.
-
-        This is intentional: passing a signed googlevideo URL directly to
-        FFmpeg can produce HTTP 403 even when yt-dlp itself can download it.
-        yt-dlp keeps the YouTube headers/PO-token/session handling on the
-        request that actually transfers the media.
-        """
         last_error: Optional[Exception] = None
         workdir: Optional[Path] = None
 
@@ -281,14 +269,10 @@ class Music(commands.Cog):
         temp_dir: Optional[str] = None
 
         try:
-            # Music Panel may already have downloaded the track. Reuse that
-            # local file instead of asking YouTube for the same track twice.
             if song.get("audio_file") and Path(song["audio_file"]).is_file():
                 info = dict(song)
             else:
                 async with self._guild_lock(guild_id):
-                    # Re-resolve/download immediately before playback so temporary
-                    # YouTube URLs are never reused from an earlier request.
                     info = await asyncio.to_thread(self._download_audio, song["url"])
 
             if not info or not info.get("audio_file"):
@@ -378,11 +362,6 @@ class Music(commands.Cog):
             target_query = query.strip()
             source_query = target_query if YOUTUBE_URL.match(target_query) else f"ytsearch:{target_query}"
 
-            # IMPORTANT: On Railway/modern YouTube, metadata-only extract_info()
-            # can be rejected with "Sign in to confirm you're not a bot" even
-            # when the actual media download is allowed.  The download path
-            # already uses the configured PO-token provider/cookies and returns
-            # a local audio file, so use it directly for /play.
             async with self._guild_lock(ctx.guild.id):
                 song = await asyncio.to_thread(self._download_audio, source_query)
         except Exception as exc:
