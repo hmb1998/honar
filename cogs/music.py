@@ -56,9 +56,6 @@ def _base_ydl_options(client: str, *, download: bool = False, outtmpl: str = "")
             "User-Agent": UA,
             "Accept-Language": "en-US,en;q=0.9",
         },
-        # Modern yt-dlp uses Deno + yt-dlp-ejs for YouTube JS challenges.
-        "js_runtimes": {"deno": {}},
-        "remote_components": {"ejs": ["github"]},
         "extractor_args": {
             "youtube": {
                 "player_client": [client],
@@ -69,7 +66,7 @@ def _base_ydl_options(client: str, *, download: bool = False, outtmpl: str = "")
         },
     }
 
-        # Optional YouTube cookies. Copy from secret to /tmp to avoid read-only file system error.
+    # Optional YouTube cookies. Copy from secret to /tmp to avoid read-only file system error.
     secret_cookie = Path("/etc/secrets/cookies.txt")
     cookie_file = os.getenv("YOUTUBE_COOKIE_FILE", "").strip()
     cookie_text = os.getenv("YOUTUBE_COOKIES", "").strip()
@@ -84,7 +81,6 @@ def _base_ydl_options(client: str, *, download: bool = False, outtmpl: str = "")
         runtime_cookie = Path("/tmp/youtube-cookies.txt")
         runtime_cookie.write_text(cookie_text + "\n", encoding="utf-8")
         options["cookiefile"] = str(runtime_cookie)
-
 
     if download:
         options.update(
